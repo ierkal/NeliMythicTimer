@@ -35,7 +35,8 @@ function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker, pu
     -- Snapshot variables
     instance.finalEnemyPercent = nil
     instance.finalEnemyText = nil
-    
+    instance.cachedDungeonTotal = 0
+
     instance.activeKeyLevel = 0
     instance.showDeathInPanel = false
     instance.syncTicker = nil
@@ -254,7 +255,12 @@ end
 function UIManager:UpdateEnemyForces(info, config)
     local dungeonTotal = info.totalQuantity or 0
     if dungeonTotal <= 0 then return end
-    
+
+    -- Cache the total on first encounter
+    if self.cachedDungeonTotal == 0 then
+        self.cachedDungeonTotal = dungeonTotal
+    end
+
     local rawKilled = 0
     if info.quantityString then
         rawKilled = tonumber(string.match(info.quantityString, "(%d+)")) or 0
@@ -288,9 +294,10 @@ function UIManager:UpdateEnemyForces(info, config)
     self.mainFrame.enemyBar:SetValue(killedPercent)
 end
 
-function UIManager:UpdateCompletedEnemyForces(config)
-    local displayText = DisplayFormatter:FormatCompletedEnemyForces(300, config) -- Using placeholder
+function UIManager:UpdateCompletedEnemyForces(dungeonTotal, config)
+    local displayText = DisplayFormatter:FormatCompletedEnemyForces(dungeonTotal, config)
     self.mainFrame.enemyText:SetText(displayText)
+    self.mainFrame.enemyText:SetTextColor(0, 1, 0) -- Green for completed
     self.mainFrame.enemyBar:SetValue(100)
     self.mainFrame.ghostBar:Hide()
 end
@@ -365,7 +372,7 @@ function UIManager:UpdateScenarioInfo(elapsed)
                 if not self.isCompleted then
                     self:UpdateEnemyForces(info, config)
                 else
-                    self.mainFrame.ghostBar:Hide()
+                    self:UpdateCompletedEnemyForces(self.cachedDungeonTotal, config)
                 end
             elseif info.description and info.description ~= "" then
                 -- Boss
