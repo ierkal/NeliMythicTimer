@@ -7,10 +7,7 @@ local Utils = NS.Utils
 
 local DEFAULTS = {
     autoInsertKey = true,
-    showTooltipPercent = true,
-    showNameplatePercent = true,
     showBossKillTimes = true,
-    showPullProgress = true,
     showEnemyPercent = true,
     showEnemyCount = true,
     scale = 1.0
@@ -24,6 +21,7 @@ function Config:New(uiManager)
     if not globalDB.config then globalDB.config = {} end
     
     local db = globalDB.config
+    -- cleanup old keys if necessary or just ignore them
     for k, v in pairs(DEFAULTS) do
         if db[k] == nil then db[k] = v end
     end
@@ -33,10 +31,9 @@ function Config:New(uiManager)
 end
 
 function Config:BuildPanel()
-    -- Create the panel frame
     local panel = CreateFrame("Frame", "NeliMythicTimerConfigPanel", UIParent)
     panel.name = "NeliMythicTimer"
-    panel:Hide() -- Let the Settings UI handle showing it
+    panel:Hide()
     
     local ui = self.uiManager
     local title = panel:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
@@ -63,9 +60,9 @@ function Config:BuildPanel()
     lblGeneral:SetPoint("TOPLEFT", 16, offsetY)
     lblGeneral:SetText("General Options")
     offsetY = offsetY - 25
+    
     CreateCheckbox("Automatically insert Keystone", "autoInsertKey", panel)
-    CreateCheckbox("Show percent in Tooltip", "showTooltipPercent", panel)
-    CreateCheckbox("Show percent in Nameplates", "showNameplatePercent", panel)
+    -- Removed Tooltip and Nameplate checkboxes
 
     offsetY = offsetY - 10
 
@@ -74,8 +71,9 @@ function Config:BuildPanel()
     lblData:SetPoint("TOPLEFT", 16, offsetY)
     lblData:SetText("Data & Display Options")
     offsetY = offsetY - 25
+    
     CreateCheckbox("Show Boss Defeated Times", "showBossKillTimes", panel)
-    CreateCheckbox("Show Current Pull Progress (Ghost Bar)", "showPullProgress", panel)
+    -- Removed Show Current Pull Progress (Ghost Bar) checkbox
     CreateCheckbox("Show Enemy Forces Percent (%)", "showEnemyPercent", panel)
     CreateCheckbox("Show Enemy Forces Count (Absolute)", "showEnemyCount", panel)
 
@@ -113,9 +111,8 @@ function Config:BuildPanel()
     if Settings and Settings.RegisterCanvasLayoutCategory then
         local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
         Settings.RegisterAddOnCategory(category)
-        NS.SettingsCategory = category -- Store category for the slash command
+        NS.SettingsCategory = category 
     else
-        -- Fallback for older clients
         InterfaceOptions_AddCategory(panel)
     end
     

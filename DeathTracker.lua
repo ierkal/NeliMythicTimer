@@ -13,21 +13,9 @@ function DeathTracker:New(eventObserver, dataManager)
     instance.timePenalty = 0
     instance.dataManager = dataManager
     
-    -- DB Check
-    local db = Utils:InitializeDB()
-    
-    -- We still keep the breakdown table for UI purposes (to see WHO died)
-    if not db.deathBreakdown then 
-        db.deathBreakdown = {} 
-    end
-
-    instance.deathBreakdown = db.deathBreakdown
-    
     -- Register the API event for accurate counting
+    -- No longer listening to COMBAT_LOG_EVENT_UNFILTERED
     eventObserver:RegisterEvent("CHALLENGE_MODE_DEATH_COUNT_UPDATED", instance, instance.UpdateDeathCount)
-    
-    -- Register Combat Log ONLY to record player names for the UI list
-    --eventObserver:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED", instance, instance.OnCombatLogEvent)
     
     -- Initial update
     instance:UpdateDeathCount()
@@ -38,25 +26,6 @@ end
 function DeathTracker:Reset()
     self.deathCount = 0
     self.timePenalty = 0
-    local db = Utils:GetDB()
-    db.deathBreakdown = {}
-    self.deathBreakdown = db.deathBreakdown
-end
-
-function DeathTracker:OnCombatLogEvent()
-    local _, subEvent, _, _, _, _, _, _, destName = CombatLogGetCurrentEventInfo()
-    
-    -- Only use this to track NAMES for the tooltip. Do NOT increment the timer count here.
-    if subEvent == "UNIT_DIED" then
-        if destName and UnitIsPlayer(destName) then
-            local _, classFilename = UnitClass(destName)
-            
-            if not self.deathBreakdown[destName] then
-                self.deathBreakdown[destName] = { count = 0, class = classFilename }
-            end
-            self.deathBreakdown[destName].count = self.deathBreakdown[destName].count + 1
-        end
-    end
 end
 
 function DeathTracker:UpdateDeathCount()
@@ -64,7 +33,6 @@ function DeathTracker:UpdateDeathCount()
         -- This API is the single source of truth for the COUNT
         self.deathCount = C_ChallengeMode.GetDeathCount() or 0
         self:CalculatePenalty()
-        
     end
 end
 
@@ -91,10 +59,6 @@ end
 
 function DeathTracker:GetTotalTimePenalty()
     return self.timePenalty
-end
-
-function DeathTracker:GetDeathBreakdown()
-    return self.deathBreakdown
 end
 
 NS.DeathTracker = DeathTracker

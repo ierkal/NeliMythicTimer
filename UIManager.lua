@@ -19,30 +19,24 @@ local SIZE_AFFIX = Constants.SIZE_AFFIX
 local SIZE_BAR_TEXT = Constants.SIZE_BAR_TEXT
 local SIZE_BOSS_LIST = Constants.SIZE_BOSS_LIST
 
-function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker, pullTracker)
+function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker)
     local instance = setmetatable({}, UIManager)
 
     instance.dataManager = dataManager
     instance.timerEngine = timerEngine
     instance.deathTracker = deathTracker
-    instance.pullTracker = pullTracker
+    -- PullTracker removed
+    
     instance.bossKillTimes = {}
     instance.bossListFrames = {}
     instance.blizzardUIHidden = false
     instance.isCompleted = false
     instance.testMode = false
     
-    -- Snapshot variables
-    instance.finalEnemyPercent = nil
-    instance.finalEnemyText = nil
-    
     instance.activeKeyLevel = 0
     instance.showDeathInPanel = false
     instance.syncTicker = nil
-    instance.isCountingDown = false
-    instance.countdownTime = 0
     
-    instance:SetupTooltipHooks()
     instance:BuildInterface()
     instance.mainFrame:Hide()
 
@@ -55,7 +49,6 @@ function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker, pu
         db.bossKillTimes = {}
     end
     
-    -- Initialize scale from DB
     local config = Utils:GetConfig()
     if config.scale then
         instance:ApplyScale(config.scale)
@@ -71,9 +64,9 @@ function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker, pu
     eventObserver:RegisterEvent("PLAYER_ENTERING_WORLD", instance, instance.OnZoneChange)
     eventObserver:RegisterEvent("ZONE_CHANGED_NEW_AREA", instance, instance.OnZoneChange)
     eventObserver:RegisterEvent("START_TIMER", instance, instance.OnStartTimer)
-    eventObserver:RegisterEvent("NAME_PLATE_UNIT_ADDED", instance, instance.OnNamePlateAdded)
-    eventObserver:RegisterEvent("NAME_PLATE_UNIT_REMOVED", instance, instance.OnNamePlateRemoved)
     eventObserver:RegisterEvent("SCENARIO_CRITERIA_UPDATE", instance, instance.OnScenarioCriteriaUpdate)
+    
+    -- Removed Nameplate events
     
     instance:CheckActiveRun()
 
@@ -83,38 +76,26 @@ end
 function UIManager:IsInActiveRun()
     local _, _, difficultyID = GetInstanceInfo()
     local mapID = C_ChallengeMode.GetActiveChallengeMapID()
-    
     return (difficultyID == 8) and (mapID ~= nil and mapID > 0)
 end
+
 function UIManager:ApplyScale(scale)
     if self.mainFrame then
         self.mainFrame:SetScale(scale or 1.0)
     end
 end
+
 function UIManager:RefreshConfig()
     local config = Utils:GetConfig()
-    
-    -- Apply Scale
     self:ApplyScale(config.scale)
     
-    -- If in demo mode, update the demo visuals
     if self.testMode then
         self:UpdateDemoDisplay(config)
     else
-        -- Otherwise update real data
         self:UpdateScenarioInfo(0)
-    end
-    
-    -- Update existing nameplates
-    local plates = C_NamePlate.GetNamePlates()
-    for _, plate in ipairs(plates) do
-         if plate.UnitFrame then
-             self:UpdateNameplateForces(plate.UnitFrame)
-         end
     end
 end
 
--- New function to draw the static demo information
 function UIManager:UpdateDemoDisplay(config)
     -- 1. Static Header Info
     self.mainFrame.dungeonName:SetText("Demo Dungeon +10")
@@ -122,10 +103,10 @@ function UIManager:UpdateDemoDisplay(config)
     self.mainFrame.deathText:SetText("|cffffffff0 Deaths|r")
     self.mainFrame.affixText:SetText("Affix1, Affix2, Affix3")
     
-    -- 2. Enemy Forces Demo (12% value)
+    -- 2. Enemy Forces Demo
     local killedPercent = 12.0
     local totalCount = 300
-    local rawKilled = 36 -- 12% of 300
+    local rawKilled = 36
     
     local parts = {}
     if config.showEnemyCount then 
@@ -138,62 +119,48 @@ function UIManager:UpdateDemoDisplay(config)
     local displayText = table.concat(parts, " - ")
     if displayText == "" then displayText = "12.00%" end
 
-    -- Ghost Bar Logic for Demo
-    if config.showPullProgress then
-        local pullPercent = 5.0
-        if config.showEnemyPercent then
-            displayText = displayText .. string.format(" |cff00ff00+ %.1f%%|r", pullPercent)
-        elseif config.showEnemyCount then
-             displayText = displayText .. string.format(" |cff00ff00+ %d|r", 15)
-        end
-        self.mainFrame.ghostBar:SetValue(killedPercent + pullPercent)
-        self.mainFrame.ghostBar:Show()
-    else
-        self.mainFrame.ghostBar:Hide()
-    end
-    
+    -- Removed Ghost Bar Logic
+
     self.mainFrame.enemyText:SetText(displayText)
     self.mainFrame.enemyBar:SetValue(killedPercent)
 
     -- 3. Boss List Demo
-    -- Hide all current boss frames first
     for _, frame in pairs(self.bossListFrames) do frame:Hide() end
         
-        local demoBosses = {
-            { name = "First Boss", time = "12:40", completed = true },
-            { name = "Second Boss", completed = false },
-            { name = "Third Boss", completed = false },
-        }
-        
-        for i, data in ipairs(demoBosses) do
-            local line = self.bossListFrames[i]
-            if not line then
-                line = self.mainFrame.bossContainer:CreateFontString(nil, "OVERLAY")
-                line:SetFont(FONT_FACE, SIZE_BOSS_LIST, FONT_FLAG) 
-                line:SetJustifyH("RIGHT")
-                self.bossListFrames[i] = line
-            end
-            line:ClearAllPoints()
-            line:SetPoint("TOPRIGHT", self.mainFrame.bossContainer, "TOPRIGHT", 0, -((i - 1) * 20))
-            
-            local displayText = data.name
-            if data.completed then
-                if config.showBossKillTimes then
-                    displayText = string.format("|cff00ff00[%s] %s|r", data.time, data.name)
-                else
-                    displayText = string.format("|cff00ff00%s|r", data.name)
-                end
-            else
-                displayText = string.format("|cffffffff%s|r", data.name)
-            end
-            
-            line:SetText(displayText)
-            line:Show()
+    local demoBosses = {
+        { name = "First Boss", time = "12:40", completed = true },
+        { name = "Second Boss", completed = false },
+        { name = "Third Boss", completed = false },
+    }
+    
+    for i, data in ipairs(demoBosses) do
+        local line = self.bossListFrames[i]
+        if not line then
+            line = self.mainFrame.bossContainer:CreateFontString(nil, "OVERLAY")
+            line:SetFont(FONT_FACE, SIZE_BOSS_LIST, FONT_FLAG) 
+            line:SetJustifyH("RIGHT")
+            self.bossListFrames[i] = line
         end
+        line:ClearAllPoints()
+        line:SetPoint("TOPRIGHT", self.mainFrame.bossContainer, "TOPRIGHT", 0, -((i - 1) * 20))
+        
+        local displayText = data.name
+        if data.completed then
+            if config.showBossKillTimes then
+                displayText = string.format("|cff00ff00[%s] %s|r", data.time, data.name)
+            else
+                displayText = string.format("|cff00ff00%s|r", data.name)
+            end
+        else
+            displayText = string.format("|cffffffff%s|r", data.name)
+        end
+        
+        line:SetText(displayText)
+        line:Show()
     end
--- Update ToggleTestMode to trigger the refresh
+end
+
 function UIManager:ToggleTestMode()
-    -- Only block if trying to ENABLE demo mode while in a real run
     if not self.testMode and self:IsInActiveRun() then
         print("|cffff0000[NMT] Cannot enable Demo Mode while in an active Mythic+ run!|r")
         return
@@ -207,7 +174,6 @@ function UIManager:ToggleTestMode()
         self:RefreshConfig()
         print("|cff00ff00[NMT]|r Demo Mode Enabled.")
     else
-        -- Clean reset when disabling
         self.mainFrame:Hide()
         self:FullReset(true)
         self:RestoreBlizzardUI()
@@ -215,46 +181,10 @@ function UIManager:ToggleTestMode()
     end
 end
 
-function UIManager:SetupTooltipHooks()
-    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, function(tooltip)
-        -- Config Check
-        local config = Utils:GetConfig()
-        if not config.showTooltipPercent then return end
+-- Removed SetupTooltipHooks
+-- Removed OnNamePlateAdded
+-- Removed OnNamePlateRemoved
 
-        local _, unit = tooltip:GetUnit()
-        
-        -- FIX: Check if unit is a valid string to prevent "Secret values" errors.
-        -- Sometimes GetUnit() returns restricted objects for SoftTargets or World Objects.
-        if not unit or type(unit) ~= "string" or UnitIsPlayer(unit) then return end
-        
-        local guid = UnitGUID(unit)
-        local npcID = Utils:GetNPCIDFromGUID(guid)
-        if npcID then
-            local mobValue = NS.MobData:GetMobValue(npcID)
-            if mobValue > 0 then
-                local percent = self:RawCountToPercent(mobValue)
-                tooltip:AddLine(" ")
-                tooltip:AddLine(string.format("|cff00ff00[NMT] + %.2f%%|r", percent))
-            end
-        end
-    end)
-end
-
-function UIManager:OnNamePlateAdded(unit)
-    local plate = C_NamePlate.GetNamePlateForUnit(unit)
-    if plate and plate.UnitFrame then
-        self:UpdateNameplateForces(plate.UnitFrame)
-    end
-end
-
-function UIManager:OnNamePlateRemoved(unit)
-    local plate = C_NamePlate.GetNamePlateForUnit(unit)
-    if plate and plate.UnitFrame and plate.UnitFrame.NeliForceText then
-        plate.UnitFrame.NeliForceText:Hide()
-    end
-end
-
--- === HELPER METHODS FOR SCENARIO UPDATE ===
 function UIManager:UpdateEnemyForces(info, config)
     local dungeonTotal = info.totalQuantity or 0
     if dungeonTotal <= 0 then return end
@@ -265,52 +195,37 @@ function UIManager:UpdateEnemyForces(info, config)
     end
 
     local killedPercent = (rawKilled / dungeonTotal) * 100
-    local pullCount = self.pullTracker:GetCurrentPullCount()
-    local pullPercent = (pullCount / dungeonTotal) * 100
+    
+    -- Removed Pull Progress calculation
 
-    -- Set color based on completion
     if killedPercent >= 100 then
         self.mainFrame.enemyText:SetTextColor(0, 1, 0)
     else
         self.mainFrame.enemyText:SetTextColor(1, 1, 1)
     end
 
-    -- Format display text
     local displayText, _ = DisplayFormatter:FormatEnemyForces(rawKilled, dungeonTotal, config)
-    
-    -- Add pull progress if enabled
-    if config.showPullProgress and pullCount > 0 then
-        local pullText, _ = DisplayFormatter:FormatPullProgress(pullCount, dungeonTotal, config)
-        displayText = displayText .. pullText
-        self.mainFrame.ghostBar:SetValue(killedPercent + pullPercent)
-        self.mainFrame.ghostBar:Show()
-    else
-        self.mainFrame.ghostBar:Hide()
-    end
     
     self.mainFrame.enemyText:SetText(displayText)
     self.mainFrame.enemyBar:SetValue(killedPercent)
 end
 
 function UIManager:UpdateCompletedEnemyForces(config)
-    local displayText = DisplayFormatter:FormatCompletedEnemyForces(300, config) -- Using placeholder
+    local displayText = DisplayFormatter:FormatCompletedEnemyForces(300, config)
     self.mainFrame.enemyText:SetText(displayText)
     self.mainFrame.enemyBar:SetValue(100)
-    self.mainFrame.ghostBar:Hide()
 end
 
 function UIManager:UpdateBossLine(bossIndex, bossName, isCompleted, currentElapsed, config)
     local db = Utils:GetDB()
     local killTimeRaw = db.bossKillTimes[bossName]
     
-    -- Record kill if API says completed but we don't have it yet
     if isCompleted and not killTimeRaw then
         killTimeRaw = currentElapsed
         if killTimeRaw <= 0 then killTimeRaw = -1 end
         db.bossKillTimes[bossName] = killTimeRaw
     end
 
-    -- Determine completion: API OR internal database
     local isBossDead = (isCompleted == true) or (killTimeRaw ~= nil)
 
     local line = self.bossListFrames[bossIndex]
@@ -330,13 +245,12 @@ function UIManager:UpdateBossLine(bossIndex, bossName, isCompleted, currentElaps
 end
 
 function UIManager:UpdateScenarioInfo(elapsed)
-    if self.testMode then return end -- Don't update real info in demo mode
+    if self.testMode then return end
 
     local config = Utils:GetConfig()
     local _, _, numCriteria = C_Scenario.GetStepInfo()
     local numCompleted = 0
 
-    -- Count completed criteria
     for i = 1, (numCriteria or 0) do
         local info = C_ScenarioInfo.GetCriteriaInfo(i)
         if info and info.completed then
@@ -344,13 +258,10 @@ function UIManager:UpdateScenarioInfo(elapsed)
         end
     end
 
-    -- Check for completion
     if numCriteria and numCriteria > 0 and numCompleted == numCriteria then
         if self.timerEngine:IsActive() then
-            -- 12.0.1 Yeni API kullanımı
             local completionInfo = C_ChallengeMode.GetChallengeCompletionInfo()
             if completionInfo and completionInfo.time and completionInfo.time > 0 then
-                -- Zaman artık table içinden 'time' alanı ile alınıyor
                 self.timerEngine:ForceFrozenTime(completionInfo.time / 1000)
             else
                 self.timerEngine:StopTimer()
@@ -361,19 +272,14 @@ function UIManager:UpdateScenarioInfo(elapsed)
     local currentElapsed, _, _ = self.timerEngine:GetTimeState()
     local bossIndex = 0
 
-    -- Process each criterion
     for i = 1, (numCriteria or 0) do
         local info = C_ScenarioInfo.GetCriteriaInfo(i)
         if info then
             if info.isWeightedProgress then
-                -- Enemy Forces
                 if not self.isCompleted then
                     self:UpdateEnemyForces(info, config)
-                else
-                    self.mainFrame.ghostBar:Hide()
                 end
             elseif info.description and info.description ~= "" then
-                -- Boss
                 bossIndex = bossIndex + 1
                 self:UpdateBossLine(bossIndex, info.description, info.completed, currentElapsed, config)
             end
@@ -393,14 +299,6 @@ end
 
 function UIManager:GetDungeonForces()
     return self.dataManager:GetDungeonForces()
-end
-
-function UIManager:RawCountToPercent(rawCount)
-    local dungeonForces = self:GetDungeonForces()
-    if dungeonForces and dungeonForces > 0 then
-        return (rawCount / dungeonForces) * 100
-    end
-    return 0
 end
 
 function UIManager:BuildInterface()
@@ -430,27 +328,11 @@ function UIManager:BuildInterface()
     f.deathText:SetPoint("TOPRIGHT", f.upgradeText, "BOTTOMRIGHT", 0, -5)
     f.deathText:SetJustifyH("RIGHT")
 
-    f.deathHitbox = CreateFrame("Button", nil, f)
+    -- Removed Mouseover Tooltip Script for death breakdown
+    f.deathHitbox = CreateFrame("Frame", nil, f) -- Changed to Frame, removed Button script
     f.deathHitbox:SetHeight(SIZE_DEATH + 4)
     f.deathHitbox:SetWidth(150)
     f.deathHitbox:SetPoint("RIGHT", f.deathText, "RIGHT", -40, 0)
-    f.deathHitbox:EnableMouse(true)
-    f.deathHitbox:SetScript("OnEnter", function(btn)
-        local totalDeaths = self.deathTracker:GetDeathCount()
-        if not totalDeaths or totalDeaths == 0 then return end
-        local deaths = self.deathTracker:GetDeathBreakdown()
-        GameTooltip:SetOwner(btn, "ANCHOR_LEFT")
-        GameTooltip:AddLine("Deaths", 1, 1, 1)
-        GameTooltip:AddLine(" ")
-        if deaths and next(deaths) then
-            for name, data in pairs(deaths) do
-                local color = (CUSTOM_CLASS_COLORS or RAID_CLASS_COLORS)[data.class] or {r=1, g=1, b=1}
-                GameTooltip:AddDoubleLine(name, tostring(data.count), color.r, color.g, color.b, 1, 0, 0)
-            end
-        end
-        GameTooltip:Show()
-    end)
-    f.deathHitbox:SetScript("OnLeave", function() GameTooltip:Hide() end)
 
     f.affixText = f:CreateFontString(nil, "OVERLAY")
     f.affixText:SetFont(FONT_FACE, SIZE_AFFIX, FONT_FLAG)
@@ -466,12 +348,7 @@ function UIManager:BuildInterface()
     f.enemyBarBG:SetAllPoints(f.enemyBarContainer)
     f.enemyBarBG:SetColorTexture(0, 0, 0, 1)
 
-    f.ghostBar = CreateFrame("StatusBar", nil, f.enemyBarContainer)
-    f.ghostBar:SetPoint("TOPLEFT", f.enemyBarContainer, "TOPLEFT", 0, 0)
-    f.ghostBar:SetPoint("BOTTOMRIGHT", f.enemyBarContainer, "BOTTOMRIGHT", 0, 1)
-    f.ghostBar:SetStatusBarTexture(BAR_TEXTURE)
-    f.ghostBar:SetStatusBarColor(0, 1, 0, 0.4)
-    f.ghostBar:SetMinMaxValues(0, 100)
+    -- Removed Ghost Bar creation
 
     f.enemyBar = CreateFrame("StatusBar", nil, f.enemyBarContainer)
     f.enemyBar:SetPoint("TOPLEFT", f.enemyBarContainer, "TOPLEFT", 0, 0)
@@ -547,7 +424,6 @@ function UIManager:CheckActiveRun()
             self:UpdateRunConfig()
             self.mainFrame.dungeonName:SetText(mapInfo.name)
             
-            -- 12.0.1 Yeni API kullanımı
             local completionInfo = C_ChallengeMode.GetChallengeCompletionInfo()
             if completionInfo and completionInfo.time and completionInfo.time > 0 then
                 self.isCompleted = true
@@ -567,7 +443,6 @@ function UIManager:CheckActiveRun()
 end
 
 function UIManager:FullReset(force)
-    -- We use engine to check if we have time
     local currentTime = self.timerEngine:GetAPITime()
     
     if force or currentTime == 0 then
@@ -588,7 +463,7 @@ function UIManager:FullReset(force)
         if self.mainFrame then
             self.mainFrame.enemyText:SetText("")
             self.mainFrame.enemyBar:SetValue(0)
-            self.mainFrame.ghostBar:Hide()
+            -- Removed ghostBar hide
             self.mainFrame.timerText:SetText("")
             self.mainFrame.upgradeText:SetText("")
         end
@@ -658,13 +533,12 @@ function UIManager:FormatTime(seconds)
 end
 
 function UIManager:OnUpdate(elapsed)
-    if self.testMode then return end -- Demo mode has static data
+    if self.testMode then return end
 
     local _, _, difficultyID = GetInstanceInfo()
     if difficultyID ~= 8 then self:HidePanel() return end
     self:EnforceBlizzardUIHidden()
 
-    -- Check engine status
     local currentTime = self.timerEngine:GetAPITime()
     local isStarted = (currentTime > 0)
     local showPanel = (isStarted or self.isCompleted)
@@ -675,13 +549,11 @@ function UIManager:OnUpdate(elapsed)
     end
 
     if showPanel then
-        -- Engine auto-fetches time, we just ensure it's "On"
         if not self.isCompleted and not self.timerEngine.running then
              local mapInfo = self.dataManager:GetMapInfo()
              if mapInfo then self.timerEngine:ResumeTimer(mapInfo.time) end
         end
 
-        -- Blizzard's elapsed time already includes death penalty
         local current, remaining, total = self.timerEngine:GetTimeState()
 
         if total > 0 then
@@ -705,38 +577,6 @@ function UIManager:OnUpdate(elapsed)
     end
 end
 
-function UIManager:UpdateNameplateForces(frame)
-    -- Config check
-    local config = Utils:GetConfig()
-    if not config.showNameplatePercent then 
-        if frame.NeliForceText then frame.NeliForceText:Hide() end
-        return 
-    end
-
-    local total = self:GetDungeonForces()
-    if total == 0 then return end
-    local unit = frame.unit
-    if not unit then return end
-    local guid = UnitGUID(unit)
-    local npcID = Utils:GetNPCIDFromGUID(guid)
-    if npcID then
-        local mobValue = NS.MobData:GetMobValue(npcID)
-        if mobValue > 0 then
-            local forcePercent = self:RawCountToPercent(mobValue)
-            if not frame.NeliForceText then
-                frame.NeliForceText = frame:CreateFontString(nil, "OVERLAY")
-                frame.NeliForceText:SetFont(FONT_FACE, Constants.SIZE_NAMEPLATE, "OUTLINE")
-                frame.NeliForceText:SetPoint("LEFT", frame.HealthBar or frame, "RIGHT", -5, -5)
-                frame.NeliForceText:SetTextColor(1, 1, 1)
-            end
-            frame.NeliForceText:SetText(string.format("%.2f%%", forcePercent))
-            frame.NeliForceText:Show()
-        elseif frame.NeliForceText then
-            frame.NeliForceText:Hide()
-        end
-    elseif frame.NeliForceText then
-        frame.NeliForceText:Hide()
-    end
-end
+-- Removed UpdateNameplateForces
 
 NS.UIManager = UIManager

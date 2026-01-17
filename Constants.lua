@@ -20,7 +20,6 @@ Constants.SIZE_DEATH = 14
 Constants.SIZE_AFFIX = 10
 Constants.SIZE_BAR_TEXT = 12
 Constants.SIZE_BOSS_LIST = 12
-Constants.SIZE_NAMEPLATE = 10
 
 -- === GAME CONSTANTS ===
 Constants.DIFFICULTY_MYTHIC_PLUS = 8
@@ -53,14 +52,5 @@ Constants.COLOR_GHOST_BAR = {r = 0, g = 1, b = 0, a = 0.4}
 Constants.COLOR_ENEMY_BAR = {r = 0.45, g = 0, b = 0.85, a = 1}
 Constants.COLOR_AFFIX_TEXT = {r = 0.5, g = 0.5, b = 0.5, a = 1}
 
--- === PULL TRACKER ===
-Constants.PULL_EVENTS = {
-    ["SPELL_DAMAGE"] = true,
-    ["RANGE_DAMAGE"] = true,
-    ["SWING_DAMAGE"] = true,
-    ["SPELL_CAST_SUCCESS"] = true,
-    ["SPELL_AURA_APPLIED"] = true,
-    ["SPELL_PERIODIC_DAMAGE"] = true,
-}
 
 NS.Constants = Constants

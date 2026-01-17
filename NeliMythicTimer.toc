@@ -14,10 +14,8 @@ DisplayFormatter.lua
 # Data and Logic Modules
 EventObserver.lua
 DungeonDataManager.lua
-MobData.lua
 DeathTracker.lua
 TimerEngine.lua
-PullTracker.lua
 
 # UI and Config
 UIManager.lua

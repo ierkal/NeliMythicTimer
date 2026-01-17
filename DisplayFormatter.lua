@@ -29,20 +29,7 @@ function DisplayFormatter:FormatEnemyForces(rawKilled, totalCount, config)
     return displayText, killedPercent
 end
 
-function DisplayFormatter:FormatPullProgress(pullCount, dungeonTotal, config)
-    local pullPercent = (pullCount / dungeonTotal) * 100
-    
-    local parts = {}
-    if config.showEnemyCount then
-        table.insert(parts, string.format("%d", pullCount))
-    end
-    if config.showEnemyPercent then
-        table.insert(parts, string.format("%.2f%%", pullPercent))
-    end
-    
-    local ghostText = table.concat(parts, " - ")
-    return string.format(" |cff00ff00+ %s|r", ghostText), pullPercent
-end
+-- Removed FormatPullProgress
 
 function DisplayFormatter:FormatCompletedEnemyForces(dungeonTotal, config)
     local parts = {}
@@ -122,8 +109,7 @@ function DisplayFormatter:GetDemoEnemyData()
         killedPercent = 12.0,
         totalCount = 300,
         rawKilled = 36,
-        pullPercent = 5.0,
-        pullCount = 15
+        -- Removed pull info from demo data
     }
 end
 

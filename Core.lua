@@ -20,7 +20,6 @@ SlashCmdList["NELIMYTHICTIMER"] = function(msg)
         local state = db.debugMode and "|cff00ff00ENABLED|r" or "|cffff0000DISABLED|r"
         print("|cff00ff00[NeliMythicTimer]|r Debug Mode: " .. state)
     elseif command == "config" or command == "options" then
-        -- [FIX] Use stored SettingsCategory for reliable opening in 12.0.1
         if NS.SettingsCategory and Settings and Settings.OpenToCategory then
              Settings.OpenToCategory(NS.SettingsCategory:GetID())
         elseif Settings and Settings.OpenToCategory then
@@ -29,7 +28,6 @@ SlashCmdList["NELIMYTHICTIMER"] = function(msg)
              InterfaceOptionsFrame_OpenToCategory("NeliMythicTimer")
         end
     elseif command == "demo" then
-        -- Shortcut to toggle demo mode
         if NS.UIManagerInstance then
             NS.UIManagerInstance:ToggleTestMode()
         end
@@ -46,17 +44,15 @@ local function Initialize()
 
     local deathTracker = NS.DeathTracker:New(eventObserver, dataManager)
     local timerEngine = NS.TimerEngine:New(dataManager, deathTracker)
-
-    local pullTracker = NS.PullTracker:New(eventObserver, dataManager)
     local keystoneAnnouncer = NS.KeystoneAnnouncer:New(eventObserver)
     
-    -- Store UIManager instance for access via slash commands
-    NS.UIManagerInstance = NS.UIManager:New(eventObserver, dataManager, timerEngine, deathTracker, pullTracker)
+    -- Store UIManager instance (PullTracker removed)
+    NS.UIManagerInstance = NS.UIManager:New(eventObserver, dataManager, timerEngine, deathTracker)
 
-    -- Initialize Config (this will register the settings panel)
+    -- Initialize Config
     local config = NS.Config:New(NS.UIManagerInstance)
 
-    print("|cff00ff00NeliMythicTimer Loaded.|r")
+    print("|cff00ff00NeliMythicTimer Loaded (Midnight Edition).|r")
 end
 
 local loader = CreateFrame("Frame")
