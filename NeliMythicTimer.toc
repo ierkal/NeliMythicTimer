@@ -1,8 +1,8 @@
 ## Interface: 120000
 ## Title: NeliMythicTimer
-## Author: Diesis Interactive
+## Author: Neliara
 ## Notes: Customized M+ Timer with additional features. 
-## Version: 1.0.1
+## Version: 1.0.3
 ## SavedVariables: NeliMythicTimerDB
 ## IconTexture: Interface\AddOns\NeliMythicTimer\NeliMythicTimer_icon.tga
 

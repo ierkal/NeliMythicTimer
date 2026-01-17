@@ -54,11 +54,20 @@ function DungeonDataManager:GetActiveKeystoneLevel()
 end
 
 function DungeonDataManager:GetAffixes()
-    local level = self:GetActiveKeystoneLevel()
+    -- GetActiveKeystoneInfo returns: level, affixIDs (table), charged
+    local level, affixIDs = C_ChallengeMode.GetActiveKeystoneInfo()
     local affixes = {}
-    if level >= 4 and level < 12 then table.insert(affixes, "Voidbound") end
-    if level >= 7 then table.insert(affixes, "Tyrannical") end
-    if level >= 12 then table.insert(affixes, "Xal'atath's Guile") end
+
+    if affixIDs and type(affixIDs) == "table" then
+        for _, affixID in ipairs(affixIDs) do
+            -- Usage: local name, description, filedataid = C_ChallengeMode.GetAffixInfo(affixID)
+            local name = C_ChallengeMode.GetAffixInfo(affixID)
+            if name then
+                table.insert(affixes, name)
+            end
+        end
+    end
+    
     return affixes
 end
 
