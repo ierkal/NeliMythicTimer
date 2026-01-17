@@ -1,10 +1,5 @@
 ﻿local _, NS = ...
 
--- ===================================
--- Utilities Module
--- Centralized helper functions
--- ===================================
-
 local Utils = {}
 
 -- === DATABASE MANAGEMENT ===

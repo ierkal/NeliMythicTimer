@@ -6,7 +6,6 @@ DungeonDataManager.__index = DungeonDataManager
 function DungeonDataManager:New()
     local instance = setmetatable({}, DungeonDataManager)
     
-    -- Hardcoded forces values
     instance.forcesData = {
         
     }
@@ -14,13 +13,11 @@ function DungeonDataManager:New()
     return instance
 end
 
--- Automatically get the list of Map IDs for the current season
 function DungeonDataManager:GetSeasonMaps()
     return C_ChallengeMode.GetMapTable()
 end
 
 function DungeonDataManager:GetDungeonForces()
-    -- Always use Blizzard's totalQuantity for consistency with quantityString
     local _, _, numCriteria = C_Scenario.GetStepInfo()
     for i = 1, (numCriteria or 0) do
         local info = C_ScenarioInfo.GetCriteriaInfo(i)
@@ -37,7 +34,6 @@ function DungeonDataManager:GetMapInfo()
     if not mapID then return nil end
 
     local name, _, timeLimit = C_ChallengeMode.GetMapUIInfo(mapID)
-    -- Fixed: Accessing .forces property here as well
     local forces = (self.forcesData[mapID] and self.forcesData[mapID].forces) or 0
     
     return {

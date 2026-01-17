@@ -1,10 +1,5 @@
 ﻿local _, NS = ...
 
--- ===================================
--- Constants Module
--- All hardcoded values in one place
--- ===================================
-
 local Constants = {}
 
 -- === FONTS & STYLING ===

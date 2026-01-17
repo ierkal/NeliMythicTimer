@@ -1,10 +1,5 @@
 ﻿local _, NS = ...
 
--- ===================================
--- DisplayFormatter Module
--- Handles text/data formatting for UI
--- ===================================
-
 local DisplayFormatter = {}
 local Utils = NS.Utils
 local Constants = NS.Constants
