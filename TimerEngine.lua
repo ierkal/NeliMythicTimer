@@ -55,8 +55,9 @@ end
 
 -- [CORE LOGIC] Directly asks Blizzard for the time. No local math.
 function TimerEngine:GetAPITime()
-    if GetWorldElapsedTime then
-        local _, elapsed = GetWorldElapsedTime(TIMER_ID)
+    local getTimer = GetWorldElapsedTime or (C_Timer and C_Timer.GetWorldElapsedTime)
+    if getTimer then
+        local _, elapsed = getTimer(TIMER_ID)
         if elapsed and elapsed > 0 then
             return elapsed
         end

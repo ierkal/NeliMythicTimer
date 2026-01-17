@@ -27,7 +27,7 @@ function DeathTracker:New(eventObserver, dataManager)
     eventObserver:RegisterEvent("CHALLENGE_MODE_DEATH_COUNT_UPDATED", instance, instance.UpdateDeathCount)
     
     -- Register Combat Log ONLY to record player names for the UI list
-    eventObserver:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED", instance, instance.OnCombatLogEvent)
+    --eventObserver:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED", instance, instance.OnCombatLogEvent)
     
     -- Initial update
     instance:UpdateDeathCount()

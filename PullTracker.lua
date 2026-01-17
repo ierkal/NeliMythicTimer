@@ -14,7 +14,7 @@ function PullTracker:New(eventObserver, dataManager)
     instance.activePullGUIDs = {} -- GUID = npcID
     instance.inBossEncounter = false
 
-    eventObserver:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED", instance, instance.OnCombatLogEvent)
+    --eventObserver:RegisterEvent("COMBAT_LOG_EVENT_UNFILTERED", instance, instance.OnCombatLogEvent)
     eventObserver:RegisterEvent("PLAYER_REGEN_ENABLED", instance, instance.OnLeaveCombat)
     eventObserver:RegisterEvent("ENCOUNTER_START", instance, instance.OnEncounterStart)
     eventObserver:RegisterEvent("ENCOUNTER_END", instance, instance.OnEncounterEnd)

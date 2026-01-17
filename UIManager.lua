@@ -222,7 +222,11 @@ function UIManager:SetupTooltipHooks()
         if not config.showTooltipPercent then return end
 
         local _, unit = tooltip:GetUnit()
-        if not unit or UnitIsPlayer(unit) then return end
+        
+        -- FIX: Check if unit is a valid string to prevent "Secret values" errors.
+        -- Sometimes GetUnit() returns restricted objects for SoftTargets or World Objects.
+        if not unit or type(unit) ~= "string" or UnitIsPlayer(unit) then return end
+        
         local guid = UnitGUID(unit)
         local npcID = Utils:GetNPCIDFromGUID(guid)
         if npcID then
@@ -343,14 +347,15 @@ function UIManager:UpdateScenarioInfo(elapsed)
     -- Check for completion
     if numCriteria and numCriteria > 0 and numCompleted == numCriteria then
         if self.timerEngine:IsActive() then
-            local officialTime = C_ChallengeMode.GetCompletionInfo()
-            if officialTime and officialTime > 0 then
-                self.timerEngine:ForceFrozenTime(officialTime / 1000)
+            -- 12.0.1 Yeni API kullanımı
+            local completionInfo = C_ChallengeMode.GetChallengeCompletionInfo()
+            if completionInfo and completionInfo.time and completionInfo.time > 0 then
+                -- Zaman artık table içinden 'time' alanı ile alınıyor
+                self.timerEngine:ForceFrozenTime(completionInfo.time / 1000)
             else
                 self.timerEngine:StopTimer()
             end
         end
-        self.isCompleted = true
     end
 
     local currentElapsed, _, _ = self.timerEngine:GetTimeState()
@@ -542,10 +547,11 @@ function UIManager:CheckActiveRun()
             self:UpdateRunConfig()
             self.mainFrame.dungeonName:SetText(mapInfo.name)
             
-            local completionTime = C_ChallengeMode.GetCompletionInfo()
-            if completionTime and completionTime > 0 then
+            -- 12.0.1 Yeni API kullanımı
+            local completionInfo = C_ChallengeMode.GetChallengeCompletionInfo()
+            if completionInfo and completionInfo.time and completionInfo.time > 0 then
                 self.isCompleted = true
-                self.timerEngine:ForceFrozenTime(completionTime / 1000)
+                self.timerEngine:ForceFrozenTime(completionInfo.time / 1000)
                 
                 self:SetGameplayVisibility(true)
                 self:UpdateScenarioInfo(0)
