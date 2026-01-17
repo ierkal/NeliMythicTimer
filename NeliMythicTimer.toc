@@ -1,0 +1,28 @@
+## Interface: 120000
+## Title: NeliMythicTimer
+## Author: Diesis Interactive
+## Notes: Customized M+ Timer with additional features. 
+## Version: 1.0.1
+## SavedVariables: NeliMythicTimerDB
+## IconTexture: Interface\AddOns\NeliMythicTimer\NeliMythicTimer_icon.tga
+
+# Core Utilities (must load first)
+Constants.lua
+Utils.lua
+DisplayFormatter.lua
+
+# Data and Logic Modules
+EventObserver.lua
+DungeonDataManager.lua
+MobData.lua
+DeathTracker.lua
+TimerEngine.lua
+PullTracker.lua
+
+# UI and Config
+UIManager.lua
+Config.lua
+KeystoneAnnouncer.lua
+
+# Initialization
+Core.lua
