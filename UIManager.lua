@@ -25,7 +25,6 @@ function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker)
     instance.dataManager = dataManager
     instance.timerEngine = timerEngine
     instance.deathTracker = deathTracker
-    -- PullTracker removed
     
     instance.bossKillTimes = {}
     instance.bossListFrames = {}
@@ -37,6 +36,9 @@ function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker)
     instance.showDeathInPanel = false
     instance.syncTicker = nil
     
+    -- [CACHE] Variable to store total forces once
+    instance.cachedDungeonTotal = 0
+
     instance:BuildInterface()
     instance.mainFrame:Hide()
 
@@ -65,8 +67,6 @@ function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker)
     eventObserver:RegisterEvent("ZONE_CHANGED_NEW_AREA", instance, instance.OnZoneChange)
     eventObserver:RegisterEvent("START_TIMER", instance, instance.OnStartTimer)
     eventObserver:RegisterEvent("SCENARIO_CRITERIA_UPDATE", instance, instance.OnScenarioCriteriaUpdate)
-    
-    -- Removed Nameplate events
     
     instance:CheckActiveRun()
 
@@ -118,8 +118,6 @@ function UIManager:UpdateDemoDisplay(config)
     
     local displayText = table.concat(parts, " - ")
     if displayText == "" then displayText = "12.00%" end
-
-    -- Removed Ghost Bar Logic
 
     self.mainFrame.enemyText:SetText(displayText)
     self.mainFrame.enemyBar:SetValue(killedPercent)
@@ -181,14 +179,15 @@ function UIManager:ToggleTestMode()
     end
 end
 
--- Removed SetupTooltipHooks
--- Removed OnNamePlateAdded
--- Removed OnNamePlateRemoved
-
 function UIManager:UpdateEnemyForces(info, config)
-    local dungeonTotal = info.totalQuantity or 0
-    if dungeonTotal <= 0 then return end
+    -- If we have a cached total, prefer it to ensure consistency
+    local dungeonTotal = self.cachedDungeonTotal
     
+    -- Safety: If cache is empty, try to use current info
+    if dungeonTotal <= 0 then dungeonTotal = info.totalQuantity or 0 end
+    
+    if dungeonTotal <= 0 then return end
+
     local rawKilled = 0
     if info.quantityString then
         rawKilled = tonumber(string.match(info.quantityString, "(%d+)")) or 0
@@ -196,8 +195,6 @@ function UIManager:UpdateEnemyForces(info, config)
 
     local killedPercent = (rawKilled / dungeonTotal) * 100
     
-    -- Removed Pull Progress calculation
-
     if killedPercent >= 100 then
         self.mainFrame.enemyText:SetTextColor(0, 1, 0)
     else
@@ -210,9 +207,10 @@ function UIManager:UpdateEnemyForces(info, config)
     self.mainFrame.enemyBar:SetValue(killedPercent)
 end
 
-function UIManager:UpdateCompletedEnemyForces(config)
-    local displayText = DisplayFormatter:FormatCompletedEnemyForces(300, config)
+function UIManager:UpdateCompletedEnemyForces(dungeonTotal, config)
+    local displayText = DisplayFormatter:FormatCompletedEnemyForces(dungeonTotal, config)
     self.mainFrame.enemyText:SetText(displayText)
+    self.mainFrame.enemyText:SetTextColor(0, 1, 0) -- Green for completed
     self.mainFrame.enemyBar:SetValue(100)
 end
 
@@ -244,10 +242,44 @@ function UIManager:UpdateBossLine(bossIndex, bossName, isCompleted, currentElaps
     line:Show()
 end
 
+-- [NEW] Helper to scan and cache the total quantity once
+function UIManager:AttemptCacheDungeonData()
+    if self.cachedDungeonTotal > 0 then return end -- Already cached
+
+    local _, _, numCriteria = C_Scenario.GetStepInfo()
+    for i = 1, (numCriteria or 0) do
+        local info = C_ScenarioInfo.GetCriteriaInfo(i)
+        if info and info.isWeightedProgress and info.totalQuantity and info.totalQuantity > 0 then
+            self.cachedDungeonTotal = info.totalQuantity
+            -- print("[NMT] Cached Total Forces: " .. self.cachedDungeonTotal) -- Debug
+            return
+        end
+    end
+end
+
 function UIManager:UpdateScenarioInfo(elapsed)
     if self.testMode then return end
+    
+    -- Try to cache if we haven't yet
+    if self.cachedDungeonTotal == 0 then
+        self:AttemptCacheDungeonData()
+    end
 
     local config = Utils:GetConfig()
+
+    -- GUARD CLAUSE: Handling Completed Runs
+    if self.isCompleted then
+        if self.cachedDungeonTotal > 0 then
+             self:UpdateCompletedEnemyForces(self.cachedDungeonTotal, config)
+        else
+             -- Fallback: If cache completely failed, show 100%
+             self.mainFrame.enemyText:SetText("100%")
+             self.mainFrame.enemyText:SetTextColor(0, 1, 0)
+             self.mainFrame.enemyBar:SetValue(100)
+        end
+        return 
+    end
+
     local _, _, numCriteria = C_Scenario.GetStepInfo()
     local numCompleted = 0
 
@@ -276,9 +308,7 @@ function UIManager:UpdateScenarioInfo(elapsed)
         local info = C_ScenarioInfo.GetCriteriaInfo(i)
         if info then
             if info.isWeightedProgress then
-                if not self.isCompleted then
-                    self:UpdateEnemyForces(info, config)
-                end
+                self:UpdateEnemyForces(info, config)
             elseif info.description and info.description ~= "" then
                 bossIndex = bossIndex + 1
                 self:UpdateBossLine(bossIndex, info.description, info.completed, currentElapsed, config)
@@ -328,8 +358,7 @@ function UIManager:BuildInterface()
     f.deathText:SetPoint("TOPRIGHT", f.upgradeText, "BOTTOMRIGHT", 0, -5)
     f.deathText:SetJustifyH("RIGHT")
 
-    -- Removed Mouseover Tooltip Script for death breakdown
-    f.deathHitbox = CreateFrame("Frame", nil, f) -- Changed to Frame, removed Button script
+    f.deathHitbox = CreateFrame("Frame", nil, f) 
     f.deathHitbox:SetHeight(SIZE_DEATH + 4)
     f.deathHitbox:SetWidth(150)
     f.deathHitbox:SetPoint("RIGHT", f.deathText, "RIGHT", -40, 0)
@@ -347,8 +376,6 @@ function UIManager:BuildInterface()
     f.enemyBarBG = f.enemyBarContainer:CreateTexture(nil, "BACKGROUND")
     f.enemyBarBG:SetAllPoints(f.enemyBarContainer)
     f.enemyBarBG:SetColorTexture(0, 0, 0, 1)
-
-    -- Removed Ghost Bar creation
 
     f.enemyBar = CreateFrame("StatusBar", nil, f.enemyBarContainer)
     f.enemyBar:SetPoint("TOPLEFT", f.enemyBarContainer, "TOPLEFT", 0, 0)
@@ -433,6 +460,8 @@ function UIManager:CheckActiveRun()
                 self:UpdateScenarioInfo(0)
             else
                 self.timerEngine:ResumeTimer(mapInfo.time) 
+                -- [TRY CACHE] Attempt to cache stats on resume
+                self:AttemptCacheDungeonData()
             end
 
             self:UpdateAffixes()
@@ -456,14 +485,13 @@ function UIManager:FullReset(force)
         self.showDeathInPanel = false
         self.deathTracker:Reset()
         self.timerEngine:Reset()
-        
+        self.cachedDungeonTotal = 0 -- RESET CACHE
         if self.keystoneAnnouncer then self.keystoneAnnouncer:Reset() end
         for _, frame in pairs(self.bossListFrames) do frame:Hide() end
 
         if self.mainFrame then
             self.mainFrame.enemyText:SetText("")
             self.mainFrame.enemyBar:SetValue(0)
-            -- Removed ghostBar hide
             self.mainFrame.timerText:SetText("")
             self.mainFrame.upgradeText:SetText("")
         end
@@ -483,6 +511,8 @@ function UIManager:OnChallengeModeStart()
         self:FullReset(true)
         self:UpdateRunConfig()
         self:UpdateUIAndShow()
+        -- [TRY CACHE] Attempt to cache on start
+        self:AttemptCacheDungeonData()
     end
 end
 
@@ -576,7 +606,5 @@ function UIManager:OnUpdate(elapsed)
         self.mainFrame.upgradeText:SetText("")
     end
 end
-
--- Removed UpdateNameplateForces
 
 NS.UIManager = UIManager

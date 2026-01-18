@@ -6,6 +6,7 @@ DungeonDataManager.__index = DungeonDataManager
 function DungeonDataManager:New()
     local instance = setmetatable({}, DungeonDataManager)
     
+    -- Hardcoded forces values
     instance.forcesData = {
         
     }
@@ -13,11 +14,13 @@ function DungeonDataManager:New()
     return instance
 end
 
+-- Automatically get the list of Map IDs for the current season
 function DungeonDataManager:GetSeasonMaps()
     return C_ChallengeMode.GetMapTable()
 end
 
 function DungeonDataManager:GetDungeonForces()
+    -- Always use Blizzard's totalQuantity for consistency with quantityString
     local _, _, numCriteria = C_Scenario.GetStepInfo()
     for i = 1, (numCriteria or 0) do
         local info = C_ScenarioInfo.GetCriteriaInfo(i)
@@ -34,6 +37,7 @@ function DungeonDataManager:GetMapInfo()
     if not mapID then return nil end
 
     local name, _, timeLimit = C_ChallengeMode.GetMapUIInfo(mapID)
+    -- Fixed: Accessing .forces property here as well
     local forces = (self.forcesData[mapID] and self.forcesData[mapID].forces) or 0
     
     return {
@@ -50,13 +54,13 @@ function DungeonDataManager:GetActiveKeystoneLevel()
 end
 
 function DungeonDataManager:GetAffixes()
-    -- GetActiveKeystoneInfo returns: level, affixID1, affixID2, affixID3, affixID4...
-    local level, a1, a2, a3, a4 = C_ChallengeMode.GetActiveKeystoneInfo()
+    -- GetActiveKeystoneInfo returns: level, affixIDs (table), charged
+    local level, affixIDs = C_ChallengeMode.GetActiveKeystoneInfo()
     local affixes = {}
-    local rawIDs = {a1, a2, a3, a4}
 
-    for _, affixID in ipairs(rawIDs) do
-        if affixID then
+    if affixIDs and type(affixIDs) == "table" then
+        for _, affixID in ipairs(affixIDs) do
+            -- Usage: local name, description, filedataid = C_ChallengeMode.GetAffixInfo(affixID)
             local name = C_ChallengeMode.GetAffixInfo(affixID)
             if name then
                 table.insert(affixes, name)

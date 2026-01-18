@@ -24,15 +24,16 @@ function TimerEngine:Reset()
     self.totalDuration = 0
     self.running = false
     self.frozenElapsed = nil 
+    self.lastKnownElapsed = 0 
 end
 
 function TimerEngine:StartTimer(duration)
     self.totalDuration = duration
     self.running = true
     self.frozenElapsed = nil
+    self.lastKnownElapsed = 0
 end
 
--- Simply enables the timer. We don't need to pass 'elapsed' anymore.
 function TimerEngine:ResumeTimer(totalDuration)
     self.totalDuration = totalDuration or 0
     self.running = true
@@ -41,19 +42,26 @@ end
 
 function TimerEngine:StopTimer()
     if self.running then
-        -- Freeze on the last known API time so the UI doesn't zero out
-        self.frozenElapsed = self:GetAPITime()
+        -- Try to get the live API time
+        local apiTime = self:GetAPITime()
+
+        -- If API is 0 (dungeon already reset), use our cached 'lastKnownElapsed'
+        if apiTime <= 0 and self.lastKnownElapsed > 0 then
+            self.frozenElapsed = self.lastKnownElapsed
+        else
+            self.frozenElapsed = apiTime
+        end
+
         self.running = false
     end
 end
 
--- Allows UIManager to overwrite the time (e.g. with official completion time)
 function TimerEngine:ForceFrozenTime(seconds)
     self.running = false
     self.frozenElapsed = seconds
+    self.lastKnownElapsed = seconds 
 end
 
--- [CORE LOGIC] Directly asks Blizzard for the time. No local math.
 function TimerEngine:GetAPITime()
     local getTimer = GetWorldElapsedTime or (C_Timer and C_Timer.GetWorldElapsedTime)
     if getTimer then
@@ -69,11 +77,18 @@ function TimerEngine:GetTimeState()
     local elapsed
     
     if self.frozenElapsed then
-        -- If frozen (run over), return the static final time
         elapsed = self.frozenElapsed
     elseif self.running then
-        -- If running, ALWAYS ask Blizzard. Never calculate locally.
         elapsed = self:GetAPITime()
+        
+        -- [CRITICAL FIX]
+        -- If we are "running" but API returns 0 (e.g., depleted instant reset), 
+        -- ignore the 0 and return the last valid time we saw.
+        if elapsed > 0 then
+            self.lastKnownElapsed = elapsed
+        elseif self.lastKnownElapsed > 0 then
+            elapsed = self.lastKnownElapsed
+        end
     else
         elapsed = 0
     end
@@ -83,8 +98,16 @@ function TimerEngine:GetTimeState()
 end
 
 function TimerEngine:OnChallengeModeComplete()
-    if self.running then
-        self:StopTimer()
+    -- 1. Try Official Blizzard Report
+    local mapID, level, time = C_ChallengeMode.GetCompletionInfo()
+
+    if time and time > 0 then
+        self:ForceFrozenTime(time / 1000)
+    else
+        -- 2. Fallback
+        if self.running then
+            self:StopTimer()
+        end
     end
 end
 
