@@ -2,7 +2,6 @@
 
 local DisplayFormatter = {}
 local Utils = NS.Utils
-local Constants = NS.Constants
 
 -- === ENEMY FORCES DISPLAY ===
 function DisplayFormatter:FormatEnemyForces(rawKilled, totalCount, config)
@@ -21,10 +20,14 @@ function DisplayFormatter:FormatEnemyForces(rawKilled, totalCount, config)
         displayText = string.format("%.2f%%", killedPercent)
     end
     
-    return displayText, killedPercent
+    -- Check completion for color
+    local color = config.colors.enemyText
+    if killedPercent >= 100 then
+        color = config.colors.enemyTextComplete
+    end
+    
+    return Utils:ColorString(displayText, color), killedPercent
 end
-
--- Removed FormatPullProgress
 
 function DisplayFormatter:FormatCompletedEnemyForces(dungeonTotal, config)
     local parts = {}
@@ -40,36 +43,43 @@ function DisplayFormatter:FormatCompletedEnemyForces(dungeonTotal, config)
         displayText = "100.00%"
     end
     
-    return displayText
+    return Utils:ColorString(displayText, config.colors.enemyTextComplete)
 end
 
 -- === BOSS DISPLAY ===
 function DisplayFormatter:FormatBossLine(bossName, isCompleted, killTime, config)
     if not isCompleted then
-        return Utils:WhiteText(bossName)
+        return Utils:ColorString(bossName, config.colors.bossAlive)
     end
     
+    local deadColor = config.colors.bossDead
     if config.showBossKillTimes and killTime then
         local timeStr = (killTime == -1) and "--:--" or Utils:FormatTime(killTime)
-        return Utils:GreenText(string.format("[%s] %s", timeStr, bossName))
+        return Utils:ColorString(string.format("[%s] %s", timeStr, bossName), deadColor)
     else
-        return Utils:GreenText(bossName)
+        return Utils:ColorString(bossName, deadColor)
     end
 end
 
 -- === TIMER DISPLAY ===
-function DisplayFormatter:FormatTimerText(currentTime, totalTime, keyLevel)
-    local timerColor = (currentTime > totalTime) and "|cffff0000" or "|cffffffff"
-    return string.format("(+%d) %s%s / %s|r", 
+function DisplayFormatter:FormatTimerText(currentTime, totalTime, keyLevel, config)
+    local timerColor = (currentTime > totalTime) and config.colors.timerOvertime or config.colors.timerText
+    local timerHex = Utils:RGBToHex(timerColor)
+    
+    local keyColor = config.colors.keyLevel or {r=1, g=1, b=1}
+    local keyHex = Utils:RGBToHex(keyColor)
+    
+    return string.format("%s(+%d)|r %s%s / %s|r", 
+        keyHex,
         keyLevel, 
-        timerColor, 
+        timerHex, 
         Utils:FormatTime(currentTime), 
         Utils:FormatTime(totalTime))
 end
 
-function DisplayFormatter:FormatUpgradeText(remainingForTwo, remainingForThree)
-    local colorTwo = (remainingForTwo > 0) and "|cffffff00" or "|cff808080"
-    local colorThree = (remainingForThree > 0) and "|cffffff00" or "|cff808080"
+function DisplayFormatter:FormatUpgradeText(remainingForTwo, remainingForThree, config)
+    local colorTwo = (remainingForTwo > 0) and Utils:RGBToHex(config.colors.upgradeTwo) or Utils:RGBToHex(config.colors.upgradeDepleted)
+    local colorThree = (remainingForThree > 0) and Utils:RGBToHex(config.colors.upgradeThree) or Utils:RGBToHex(config.colors.upgradeDepleted)
     
     return string.format("%s%s|r  %s%s|r",
         colorThree, Utils:FormatTime(math.max(0, remainingForThree)),
@@ -77,25 +87,21 @@ function DisplayFormatter:FormatUpgradeText(remainingForTwo, remainingForThree)
 end
 
 -- === DEATH DISPLAY ===
-function DisplayFormatter:FormatDeathText(deathCount, timePenalty)
+function DisplayFormatter:FormatDeathText(deathCount, timePenalty, config)
+    local txtColor = Utils:RGBToHex(config.colors.deathText)
+    local penaltyColor = Utils:RGBToHex(config.colors.deathPenalty)
+    
     if deathCount > 0 then
-        return string.format("|cffffffff%d Deaths|r |cffff0000(-%ds)|r", deathCount, timePenalty)
+        return string.format("%s%d Deaths|r %s(-%ds)|r", txtColor, deathCount, penaltyColor, timePenalty)
     else
-        return "|cffffffff0 Deaths|r"
+        return string.format("%s0 Deaths|r", txtColor)
     end
 end
 
 -- === AFFIX DISPLAY ===
-function DisplayFormatter:FormatAffixText(affixes)
-    local affixString = ""
-    for i, affix in ipairs(affixes) do
-        if i == 1 then
-            affixString = affix
-        else
-            affixString = affixString .. ", " .. affix
-        end
-    end
-    return affixString
+function DisplayFormatter:FormatAffixText(affixes, config)
+    local affixString = table.concat(affixes, ", ")
+    return Utils:ColorString(affixString, config.colors.affixText)
 end
 
 -- === DEMO DATA ===
@@ -104,7 +110,6 @@ function DisplayFormatter:GetDemoEnemyData()
         killedPercent = 12.0,
         totalCount = 300,
         rawKilled = 36,
-        -- Removed pull info from demo data
     }
 end
 

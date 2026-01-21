@@ -11,6 +11,7 @@ local DisplayFormatter = NS.DisplayFormatter
 local FONT_FACE = Constants.FONT_FACE
 local FONT_FLAG = Constants.FONT_FLAG
 local BAR_TEXTURE = Constants.BAR_TEXTURE
+-- Sizes
 local SIZE_HEADER = Constants.SIZE_HEADER
 local SIZE_TIMER = Constants.SIZE_TIMER
 local SIZE_UPGRADE = Constants.SIZE_UPGRADE
@@ -31,12 +32,8 @@ function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker)
     instance.blizzardUIHidden = false
     instance.isCompleted = false
     instance.testMode = false
-    
     instance.activeKeyLevel = 0
     instance.showDeathInPanel = false
-    instance.syncTicker = nil
-    
-    -- [CACHE] Variable to store total forces once
     instance.cachedDungeonTotal = 0
 
     instance:BuildInterface()
@@ -45,24 +42,13 @@ function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker)
     instance.mainFrame:SetScript("OnUpdate", function(self, elapsed)
         instance:OnUpdate(elapsed)
     end)
-
-    local db = Utils:InitializeDB()
-    if not db.bossKillTimes then
-        db.bossKillTimes = {}
-    end
     
-    local config = Utils:GetConfig()
-    if config.scale then
-        instance:ApplyScale(config.scale)
-    end
+    -- Apply initial config
+    instance:RefreshConfig()
 
     eventObserver:RegisterEvent("CHALLENGE_MODE_START", instance, instance.OnChallengeModeStart)
     eventObserver:RegisterEvent("CHALLENGE_MODE_COMPLETED", instance, instance.OnChallengeModeEnd)
-    
-    eventObserver:RegisterEvent("CHALLENGE_MODE_RESET", instance, function()
-        instance:HidePanel()
-    end)
-    
+    eventObserver:RegisterEvent("CHALLENGE_MODE_RESET", instance, function() instance:HidePanel() end)
     eventObserver:RegisterEvent("PLAYER_ENTERING_WORLD", instance, instance.OnZoneChange)
     eventObserver:RegisterEvent("ZONE_CHANGED_NEW_AREA", instance, instance.OnZoneChange)
     eventObserver:RegisterEvent("START_TIMER", instance, instance.OnStartTimer)
@@ -89,6 +75,17 @@ function UIManager:RefreshConfig()
     local config = Utils:GetConfig()
     self:ApplyScale(config.scale)
     
+    -- Apply static colors
+    if config.colors then
+        -- Enemy Bar
+        local cBar = config.colors.enemyBar
+        if cBar then self.mainFrame.enemyBar:SetStatusBarColor(cBar.r, cBar.g, cBar.b, cBar.a) end
+        
+        -- Dungeon Name
+        local cName = config.colors.dungeonName
+        if cName then self.mainFrame.dungeonName:SetTextColor(cName.r, cName.g, cName.b, cName.a) end
+    end
+    
     if self.testMode then
         self:UpdateDemoDisplay(config)
     else
@@ -98,38 +95,23 @@ end
 
 function UIManager:UpdateDemoDisplay(config)
     -- 1. Static Header Info
-    self.mainFrame.dungeonName:SetText("Demo Dungeon +10")
-    self.mainFrame.timerText:SetText("(+10) |cffffffff23:54 / 30:00|r")
-    self.mainFrame.deathText:SetText("|cffffffff0 Deaths|r")
-    self.mainFrame.affixText:SetText("Affix1, Affix2, Affix3")
+    self.mainFrame.dungeonName:SetText("Demo Dungeon")
+    self.mainFrame.timerText:SetText(DisplayFormatter:FormatTimerText(1554, 1800, 10, config))
+    
+    self.mainFrame.deathText:SetText(DisplayFormatter:FormatDeathText(0, 0, config))
+    
+    self.mainFrame.affixText:SetText(DisplayFormatter:FormatAffixText({"Affix1", "Affix2"}, config))
+    self.mainFrame.upgradeText:SetText(DisplayFormatter:FormatUpgradeText(100, 300, config))
     
     -- 2. Enemy Forces Demo
-    local killedPercent = 12.0
-    local totalCount = 300
-    local rawKilled = 36
-    
-    local parts = {}
-    if config.showEnemyCount then 
-        table.insert(parts, string.format("%d/%d", rawKilled, totalCount)) 
-    end
-    if config.showEnemyPercent then 
-        table.insert(parts, string.format("%.1f%%", killedPercent)) 
-    end
-    
-    local displayText = table.concat(parts, " - ")
-    if displayText == "" then displayText = "12.00%" end
-
+    local demoData = DisplayFormatter:GetDemoEnemyData()
+    local displayText, _ = DisplayFormatter:FormatEnemyForces(demoData.rawKilled, demoData.totalCount, config)
     self.mainFrame.enemyText:SetText(displayText)
-    self.mainFrame.enemyBar:SetValue(killedPercent)
+    self.mainFrame.enemyBar:SetValue(demoData.killedPercent)
 
     -- 3. Boss List Demo
     for _, frame in pairs(self.bossListFrames) do frame:Hide() end
-        
-    local demoBosses = {
-        { name = "First Boss", time = "12:40", completed = true },
-        { name = "Second Boss", completed = false },
-        { name = "Third Boss", completed = false },
-    }
+    local demoBosses = DisplayFormatter:GetDemoBosses()
     
     for i, data in ipairs(demoBosses) do
         local line = self.bossListFrames[i]
@@ -142,18 +124,8 @@ function UIManager:UpdateDemoDisplay(config)
         line:ClearAllPoints()
         line:SetPoint("TOPRIGHT", self.mainFrame.bossContainer, "TOPRIGHT", 0, -((i - 1) * 20))
         
-        local displayText = data.name
-        if data.completed then
-            if config.showBossKillTimes then
-                displayText = string.format("|cff00ff00[%s] %s|r", data.time, data.name)
-            else
-                displayText = string.format("|cff00ff00%s|r", data.name)
-            end
-        else
-            displayText = string.format("|cffffffff%s|r", data.name)
-        end
-        
-        line:SetText(displayText)
+        local text = DisplayFormatter:FormatBossLine(data.name, data.completed, 760, config)
+        line:SetText(text)
         line:Show()
     end
 end
@@ -180,12 +152,8 @@ function UIManager:ToggleTestMode()
 end
 
 function UIManager:UpdateEnemyForces(info, config)
-    -- If we have a cached total, prefer it to ensure consistency
     local dungeonTotal = self.cachedDungeonTotal
-    
-    -- Safety: If cache is empty, try to use current info
     if dungeonTotal <= 0 then dungeonTotal = info.totalQuantity or 0 end
-    
     if dungeonTotal <= 0 then return end
 
     local rawKilled = 0
@@ -193,24 +161,15 @@ function UIManager:UpdateEnemyForces(info, config)
         rawKilled = tonumber(string.match(info.quantityString, "(%d+)")) or 0
     end
 
-    local killedPercent = (rawKilled / dungeonTotal) * 100
-    
-    if killedPercent >= 100 then
-        self.mainFrame.enemyText:SetTextColor(0, 1, 0)
-    else
-        self.mainFrame.enemyText:SetTextColor(1, 1, 1)
-    end
-
-    local displayText, _ = DisplayFormatter:FormatEnemyForces(rawKilled, dungeonTotal, config)
+    local displayText, percent = DisplayFormatter:FormatEnemyForces(rawKilled, dungeonTotal, config)
     
     self.mainFrame.enemyText:SetText(displayText)
-    self.mainFrame.enemyBar:SetValue(killedPercent)
+    self.mainFrame.enemyBar:SetValue(percent)
 end
 
 function UIManager:UpdateCompletedEnemyForces(dungeonTotal, config)
     local displayText = DisplayFormatter:FormatCompletedEnemyForces(dungeonTotal, config)
     self.mainFrame.enemyText:SetText(displayText)
-    self.mainFrame.enemyText:SetTextColor(0, 1, 0) -- Green for completed
     self.mainFrame.enemyBar:SetValue(100)
 end
 
@@ -242,16 +201,13 @@ function UIManager:UpdateBossLine(bossIndex, bossName, isCompleted, currentElaps
     line:Show()
 end
 
--- [NEW] Helper to scan and cache the total quantity once
 function UIManager:AttemptCacheDungeonData()
-    if self.cachedDungeonTotal > 0 then return end -- Already cached
-
+    if self.cachedDungeonTotal > 0 then return end 
     local _, _, numCriteria = C_Scenario.GetStepInfo()
     for i = 1, (numCriteria or 0) do
         local info = C_ScenarioInfo.GetCriteriaInfo(i)
         if info and info.isWeightedProgress and info.totalQuantity and info.totalQuantity > 0 then
             self.cachedDungeonTotal = info.totalQuantity
-            -- print("[NMT] Cached Total Forces: " .. self.cachedDungeonTotal) -- Debug
             return
         end
     end
@@ -259,22 +215,15 @@ end
 
 function UIManager:UpdateScenarioInfo(elapsed)
     if self.testMode then return end
+    if self.cachedDungeonTotal == 0 then self:AttemptCacheDungeonData() end
     
-    -- Try to cache if we haven't yet
-    if self.cachedDungeonTotal == 0 then
-        self:AttemptCacheDungeonData()
-    end
-
     local config = Utils:GetConfig()
 
-    -- GUARD CLAUSE: Handling Completed Runs
     if self.isCompleted then
         if self.cachedDungeonTotal > 0 then
              self:UpdateCompletedEnemyForces(self.cachedDungeonTotal, config)
         else
-             -- Fallback: If cache completely failed, show 100%
              self.mainFrame.enemyText:SetText("100%")
-             self.mainFrame.enemyText:SetTextColor(0, 1, 0)
              self.mainFrame.enemyBar:SetValue(100)
         end
         return 
@@ -290,6 +239,7 @@ function UIManager:UpdateScenarioInfo(elapsed)
         end
     end
 
+    -- Check completion
     if numCriteria and numCriteria > 0 and numCompleted == numCriteria then
         if self.timerEngine:IsActive() then
             local completionInfo = C_ChallengeMode.GetChallengeCompletionInfo()
@@ -327,10 +277,6 @@ function UIManager:OnScenarioCriteriaUpdate()
     self:UpdateScenarioInfo(0)
 end
 
-function UIManager:GetDungeonForces()
-    return self.dataManager:GetDungeonForces()
-end
-
 function UIManager:BuildInterface()
     local f = CreateFrame("Frame", "NeliMythicHUD", UIParent)
     f:SetSize(285, 300)
@@ -351,7 +297,6 @@ function UIManager:BuildInterface()
     f.upgradeText:SetFont(FONT_FACE, SIZE_UPGRADE, FONT_FLAG)
     f.upgradeText:SetPoint("TOPRIGHT", f.timerText, "BOTTOMRIGHT", 0, -2)
     f.upgradeText:SetJustifyH("RIGHT")
-    f.upgradeText:SetTextColor(1, 1, 0, 1)
 
     f.deathText = f:CreateFontString(nil, "OVERLAY")
     f.deathText:SetFont(FONT_FACE, SIZE_DEATH, FONT_FLAG)
@@ -367,7 +312,6 @@ function UIManager:BuildInterface()
     f.affixText:SetFont(FONT_FACE, SIZE_AFFIX, FONT_FLAG)
     f.affixText:SetPoint("TOPRIGHT", f.deathText, "BOTTOMRIGHT", 0, -5)
     f.affixText:SetJustifyH("RIGHT")
-    f.affixText:SetTextColor(0.5, 0.5, 0.5, 1)
 
     f.enemyBarContainer = CreateFrame("Frame", nil, f)
     f.enemyBarContainer:SetSize(270, 16)
@@ -381,13 +325,11 @@ function UIManager:BuildInterface()
     f.enemyBar:SetPoint("TOPLEFT", f.enemyBarContainer, "TOPLEFT", 0, 0)
     f.enemyBar:SetPoint("BOTTOMRIGHT", f.enemyBarContainer, "BOTTOMRIGHT", 0, 0)
     f.enemyBar:SetStatusBarTexture(BAR_TEXTURE)
-    f.enemyBar:SetStatusBarColor(0.45, 0, 0.85, 1)
     f.enemyBar:SetMinMaxValues(0, 100)
 
     f.enemyText = f.enemyBar:CreateFontString(nil, "OVERLAY")
     f.enemyText:SetFont(FONT_FACE, SIZE_BAR_TEXT, FONT_FLAG)
     f.enemyText:SetPoint("CENTER", f.enemyBar, "CENTER")
-    f.enemyText:SetTextColor(1, 1, 1, 1)
 
     f.bossContainer = CreateFrame("Frame", nil, f)
     f.bossContainer:SetSize(230, 200)
@@ -427,7 +369,9 @@ end
 function UIManager:SetGameplayVisibility(show)
     self.mainFrame.upgradeText:SetShown(show)
     self.mainFrame.enemyBarContainer:SetShown(show)
-    local showDeaths = show and self.showDeathInPanel
+    
+    local showDeaths = show and (self.showDeathInPanel or self.testMode)
+    
     self.mainFrame.deathText:SetShown(showDeaths)
     self.mainFrame.deathHitbox:SetShown(showDeaths)
     self.mainFrame.affixText:SetShown(show)
@@ -460,7 +404,6 @@ function UIManager:CheckActiveRun()
                 self:UpdateScenarioInfo(0)
             else
                 self.timerEngine:ResumeTimer(mapInfo.time) 
-                -- [TRY CACHE] Attempt to cache stats on resume
                 self:AttemptCacheDungeonData()
             end
 
@@ -478,15 +421,12 @@ function UIManager:FullReset(force)
         self.isCompleted = false
         local db = Utils:GetDB()
         db.bossKillTimes = {}
-        self.finalEnemyPercent = nil
-        self.finalEnemyText = nil
         
         self.activeKeyLevel = 0
         self.showDeathInPanel = false
         self.deathTracker:Reset()
         self.timerEngine:Reset()
-        self.cachedDungeonTotal = 0 -- RESET CACHE
-        if self.keystoneAnnouncer then self.keystoneAnnouncer:Reset() end
+        self.cachedDungeonTotal = 0 
         for _, frame in pairs(self.bossListFrames) do frame:Hide() end
 
         if self.mainFrame then
@@ -511,7 +451,6 @@ function UIManager:OnChallengeModeStart()
         self:FullReset(true)
         self:UpdateRunConfig()
         self:UpdateUIAndShow()
-        -- [TRY CACHE] Attempt to cache on start
         self:AttemptCacheDungeonData()
     end
 end
@@ -551,15 +490,12 @@ end
 
 function UIManager:UpdateAffixes()
     local affixes = self.dataManager:GetAffixes()
-    local affixString = DisplayFormatter:FormatAffixText(affixes)
+    local config = Utils:GetConfig()
+    local affixString = DisplayFormatter:FormatAffixText(affixes, config)
     self.mainFrame.affixText:SetText(affixString)
     local offset = (affixString == "") and 0 or -20
     self.mainFrame.enemyBarContainer:ClearAllPoints()
     self.mainFrame.enemyBarContainer:SetPoint("TOPRIGHT", self.mainFrame.affixText, "BOTTOMRIGHT", 0, offset)
-end
-
-function UIManager:FormatTime(seconds)
-    return Utils:FormatTime(seconds)
 end
 
 function UIManager:OnUpdate(elapsed)
@@ -579,6 +515,8 @@ function UIManager:OnUpdate(elapsed)
     end
 
     if showPanel then
+        local config = Utils:GetConfig()
+        
         if not self.isCompleted and not self.timerEngine.running then
              local mapInfo = self.dataManager:GetMapInfo()
              if mapInfo then self.timerEngine:ResumeTimer(mapInfo.time) end
@@ -587,11 +525,11 @@ function UIManager:OnUpdate(elapsed)
         local current, remaining, total = self.timerEngine:GetTimeState()
 
         if total > 0 then
-            self.mainFrame.timerText:SetText(DisplayFormatter:FormatTimerText(current, total, self.activeKeyLevel))
+            self.mainFrame.timerText:SetText(DisplayFormatter:FormatTimerText(current, total, self.activeKeyLevel, config))
 
             local t2, t3 = self.timerEngine:GetThresholds()
             local r3, r2 = t3 - current, t2 - current
-            self.mainFrame.upgradeText:SetText(DisplayFormatter:FormatUpgradeText(r2, r3))
+            self.mainFrame.upgradeText:SetText(DisplayFormatter:FormatUpgradeText(r2, r3, config))
         end
 
         self:UpdateScenarioInfo(elapsed)
@@ -599,7 +537,7 @@ function UIManager:OnUpdate(elapsed)
         if self.mainFrame.deathText:IsShown() then
             local deathCount = self.deathTracker:GetDeathCount()
             local penalty = self.deathTracker:GetTotalTimePenalty()
-            self.mainFrame.deathText:SetText(DisplayFormatter:FormatDeathText(deathCount, penalty))
+            self.mainFrame.deathText:SetText(DisplayFormatter:FormatDeathText(deathCount, penalty, config))
         end
     else
         self.mainFrame.timerText:SetText(string.format("(+%d) Starting...", self.activeKeyLevel))
