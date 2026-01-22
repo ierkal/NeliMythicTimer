@@ -67,6 +67,38 @@ function Config:BuildPanel()
         if ui then ui:ApplyScale(value) end
     end)
 
+    -- [NEW] Position Controls
+    offsetY = offsetY - 50
+    local lblPos = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    lblPos:SetPoint("TOPLEFT", 16, offsetY)
+    lblPos:SetText("Position Settings")
+    
+    offsetY = offsetY - 25
+    local btnUnlock = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    btnUnlock:SetSize(140, 25) 
+    btnUnlock:SetPoint("TOPLEFT", 16, offsetY)
+    btnUnlock:SetText("Unlock Frame")
+    btnUnlock:SetScript("OnClick", function(self)
+        if self.isUnlocked then
+            self.isUnlocked = false
+            self:SetText("Unlock Frame")
+            if ui then ui:SetUnlocked(false) end
+        else
+            self.isUnlocked = true
+            self:SetText("Lock Frame")
+            if ui then ui:SetUnlocked(true) end
+        end
+    end)
+
+    local btnResetPos = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    btnResetPos:SetSize(140, 25) 
+    btnResetPos:SetPoint("LEFT", btnUnlock, "RIGHT", 10, 0)
+    btnResetPos:SetText("Reset Position")
+    btnResetPos:SetScript("OnClick", function()
+        if ui then ui:ResetPosition() end
+    end)
+
+    -- Bottom Buttons
     offsetY = offsetY - 50
     local btnReload = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
     btnReload:SetSize(120, 25) 

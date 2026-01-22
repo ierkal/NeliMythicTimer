@@ -11,7 +11,6 @@ local DisplayFormatter = NS.DisplayFormatter
 local FONT_FACE = Constants.FONT_FACE
 local FONT_FLAG = Constants.FONT_FLAG
 local BAR_TEXTURE = Constants.BAR_TEXTURE
--- Sizes
 local SIZE_HEADER = Constants.SIZE_HEADER
 local SIZE_TIMER = Constants.SIZE_TIMER
 local SIZE_UPGRADE = Constants.SIZE_UPGRADE
@@ -19,6 +18,14 @@ local SIZE_DEATH = Constants.SIZE_DEATH
 local SIZE_AFFIX = Constants.SIZE_AFFIX
 local SIZE_BAR_TEXT = Constants.SIZE_BAR_TEXT
 local SIZE_BOSS_LIST = Constants.SIZE_BOSS_LIST
+
+-- [SMART POSITIONING]
+local function GetSmartDefaultOffset()
+    local xOffset = -30
+    if MultiBarRight and MultiBarRight:IsShown() then xOffset = xOffset - 45 end
+    if MultiBarLeft and MultiBarLeft:IsShown() then xOffset = xOffset - 45 end
+    return xOffset
+end
 
 function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker)
     local instance = setmetatable({}, UIManager)
@@ -43,7 +50,6 @@ function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker)
         instance:OnUpdate(elapsed)
     end)
     
-    -- Apply initial config
     instance:RefreshConfig()
 
     eventObserver:RegisterEvent("CHALLENGE_MODE_START", instance, instance.OnChallengeModeStart)
@@ -55,7 +61,8 @@ function UIManager:New(eventObserver, dataManager, timerEngine, deathTracker)
     eventObserver:RegisterEvent("SCENARIO_CRITERIA_UPDATE", instance, instance.OnScenarioCriteriaUpdate)
     
     instance:CheckActiveRun()
-
+    
+    NS.UIManagerInstance = instance
     return instance
 end
 
@@ -74,14 +81,12 @@ end
 function UIManager:RefreshConfig()
     local config = Utils:GetConfig()
     self:ApplyScale(config.scale)
-    
-    -- Apply static colors
+    self:RestorePosition()
+
     if config.colors then
-        -- Enemy Bar
         local cBar = config.colors.enemyBar
         if cBar then self.mainFrame.enemyBar:SetStatusBarColor(cBar.r, cBar.g, cBar.b, cBar.a) end
         
-        -- Dungeon Name
         local cName = config.colors.dungeonName
         if cName then self.mainFrame.dungeonName:SetTextColor(cName.r, cName.g, cName.b, cName.a) end
     end
@@ -93,23 +98,48 @@ function UIManager:RefreshConfig()
     end
 end
 
+-- [NEW] Dynamic Layout Engine
+function UIManager:UpdateLayout()
+    local lastFrame = self.mainFrame.upgradeText
+    local smallGap = -5
+    local largeGap = -5
+    
+    -- Determine what SHOULD be visible
+    local showDeath = (self.showDeathInPanel or self.testMode)
+    local hasAffix = (self.mainFrame.affixText:GetText() ~= "")
+    
+    -- 1. Death Text
+    if showDeath then
+        self.mainFrame.deathText:ClearAllPoints()
+        self.mainFrame.deathText:SetPoint("TOPRIGHT", lastFrame, "BOTTOMRIGHT", 0, smallGap)
+        lastFrame = self.mainFrame.deathText
+    end
+    
+    -- 2. Affix Text
+    if hasAffix then
+        self.mainFrame.affixText:ClearAllPoints()
+        self.mainFrame.affixText:SetPoint("TOPRIGHT", lastFrame, "BOTTOMRIGHT", 0, smallGap)
+        lastFrame = self.mainFrame.affixText
+    end
+    
+    -- 3. Enemy Bar (Anchors to whatever was last)
+    self.mainFrame.enemyBarContainer:ClearAllPoints()
+    -- If no affixes/deaths, we might want a slightly smaller gap than -20, but -20 usually looks good for separation
+    self.mainFrame.enemyBarContainer:SetPoint("TOPRIGHT", lastFrame, "BOTTOMRIGHT", 0, largeGap)
+end
+
 function UIManager:UpdateDemoDisplay(config)
-    -- 1. Static Header Info
     self.mainFrame.dungeonName:SetText("Demo Dungeon")
     self.mainFrame.timerText:SetText(DisplayFormatter:FormatTimerText(1554, 1800, 10, config))
-    
     self.mainFrame.deathText:SetText(DisplayFormatter:FormatDeathText(0, 0, config))
-    
     self.mainFrame.affixText:SetText(DisplayFormatter:FormatAffixText({"Affix1", "Affix2"}, config))
     self.mainFrame.upgradeText:SetText(DisplayFormatter:FormatUpgradeText(100, 300, config))
     
-    -- 2. Enemy Forces Demo
     local demoData = DisplayFormatter:GetDemoEnemyData()
     local displayText, _ = DisplayFormatter:FormatEnemyForces(demoData.rawKilled, demoData.totalCount, config)
     self.mainFrame.enemyText:SetText(displayText)
     self.mainFrame.enemyBar:SetValue(demoData.killedPercent)
 
-    -- 3. Boss List Demo
     for _, frame in pairs(self.bossListFrames) do frame:Hide() end
     local demoBosses = DisplayFormatter:GetDemoBosses()
     
@@ -137,6 +167,10 @@ function UIManager:ToggleTestMode()
     end
 
     self.testMode = not self.testMode
+    
+    -- [UPDATE] Trigger Layout Update because Test Mode forces Death/Affix visibility
+    self:UpdateLayout()
+
     if self.testMode then
         self.mainFrame:Show()
         self:SetGameplayVisibility(true)
@@ -162,7 +196,6 @@ function UIManager:UpdateEnemyForces(info, config)
     end
 
     local displayText, percent = DisplayFormatter:FormatEnemyForces(rawKilled, dungeonTotal, config)
-    
     self.mainFrame.enemyText:SetText(displayText)
     self.mainFrame.enemyBar:SetValue(percent)
 end
@@ -239,7 +272,6 @@ function UIManager:UpdateScenarioInfo(elapsed)
         end
     end
 
-    -- Check completion
     if numCriteria and numCriteria > 0 and numCompleted == numCriteria then
         if self.timerEngine:IsActive() then
             local completionInfo = C_ChallengeMode.GetChallengeCompletionInfo()
@@ -280,7 +312,27 @@ end
 function UIManager:BuildInterface()
     local f = CreateFrame("Frame", "NeliMythicHUD", UIParent)
     f:SetSize(285, 300)
-    f:SetPoint("RIGHT", -30, 20)
+    
+    f:SetMovable(true)
+    f:SetClampedToScreen(true)
+    f:SetUserPlaced(false) 
+    
+    f.dragTex = f:CreateTexture(nil, "ARTWORK")
+    f.dragTex:SetAllPoints()
+    f.dragTex:SetColorTexture(0, 0, 0, 0.6) 
+    f.dragTex:Hide()
+
+    f:SetScript("OnMouseDown", function(self, button)
+        if self.isUnlocked and button == "LeftButton" then
+            self:StartMoving()
+        end
+    end)
+    f:SetScript("OnMouseUp", function(self, button)
+        if self.isUnlocked and button == "LeftButton" then
+            self:StopMovingOrSizing()
+            self.owner:SavePosition() 
+        end
+    end)
 
     f.dungeonName = f:CreateFontString(nil, "OVERLAY")
     f.dungeonName:SetFont(FONT_FACE, SIZE_HEADER, FONT_FLAG)
@@ -298,6 +350,8 @@ function UIManager:BuildInterface()
     f.upgradeText:SetPoint("TOPRIGHT", f.timerText, "BOTTOMRIGHT", 0, -2)
     f.upgradeText:SetJustifyH("RIGHT")
 
+    -- [DYNAMIC ELEMENTS]
+    -- Note: Initial anchors are set here, but UpdateLayout will override them instantly
     f.deathText = f:CreateFontString(nil, "OVERLAY")
     f.deathText:SetFont(FONT_FACE, SIZE_DEATH, FONT_FLAG)
     f.deathText:SetPoint("TOPRIGHT", f.upgradeText, "BOTTOMRIGHT", 0, -5)
@@ -315,7 +369,7 @@ function UIManager:BuildInterface()
 
     f.enemyBarContainer = CreateFrame("Frame", nil, f)
     f.enemyBarContainer:SetSize(270, 16)
-    f.enemyBarContainer:SetPoint("TOPRIGHT", f.affixText, "BOTTOMRIGHT", 0, -20)
+    f.enemyBarContainer:SetPoint("TOPRIGHT", f.affixText, "BOTTOMRIGHT", 0, 0)
     
     f.enemyBarBG = f.enemyBarContainer:CreateTexture(nil, "BACKGROUND")
     f.enemyBarBG:SetAllPoints(f.enemyBarContainer)
@@ -336,6 +390,63 @@ function UIManager:BuildInterface()
     f.bossContainer:SetPoint("TOPRIGHT", f.enemyBar, "BOTTOMRIGHT", 0, -15)
 
     self.mainFrame = f
+    self.mainFrame.owner = self 
+    
+    self:RestorePosition()
+    self:UpdateLayout() -- Ensure initial state is correct
+end
+
+function UIManager:SavePosition()
+    local point, _, relativePoint, x, y = self.mainFrame:GetPoint()
+    local config = Utils:GetConfig()
+    config.position = { 
+        point = point, 
+        relativePoint = relativePoint, 
+        x = x, 
+        y = y 
+    }
+end
+
+function UIManager:ResetPosition()
+    local config = Utils:GetConfig()
+    config.position = nil 
+    self:RestorePosition() 
+    print("|cff00ff00[NMT]|r Frame position reset to default.")
+end
+
+function UIManager:RestorePosition()
+    if not self.mainFrame then return end
+    
+    local config = Utils:GetConfig()
+    if config.position then
+        self.mainFrame:ClearAllPoints()
+        self.mainFrame:SetPoint(config.position.point, UIParent, config.position.relativePoint, config.position.x, config.position.y)
+    else
+        self.mainFrame:ClearAllPoints()
+        local xOffset = GetSmartDefaultOffset()
+        self.mainFrame:SetPoint("RIGHT", xOffset, 20)
+    end
+end
+
+function UIManager:SetUnlocked(unlocked)
+    self.mainFrame.isUnlocked = unlocked
+    self.mainFrame:SetEnableMouse(unlocked)
+    if unlocked then
+        self.mainFrame:SetFrameStrata("DIALOG") 
+        self.mainFrame.dragTex:Show()
+        self.mainFrame:Show() 
+        self.mainFrame.dungeonName:SetText("Drag to Move")
+    else
+        self.mainFrame:SetFrameStrata("MEDIUM") 
+        self.mainFrame.dragTex:Hide()
+        
+        if not self.testMode and not self:IsInActiveRun() then 
+            self.mainFrame:Hide() 
+        else
+            local mapInfo = self.dataManager:GetMapInfo()
+            if mapInfo then self.mainFrame.dungeonName:SetText(mapInfo.name) end
+        end
+    end
 end
 
 function UIManager:HideBlizzardUI()
@@ -362,19 +473,22 @@ function UIManager:ShowPanel()
 end
 
 function UIManager:HidePanel()
+    if self.mainFrame.isUnlocked then return end
     self.mainFrame:Hide()
     self:RestoreBlizzardUI()
 end
 
+-- [UPDATED] Visibility now respects the "hasAffix" check for cleaner logic
 function UIManager:SetGameplayVisibility(show)
     self.mainFrame.upgradeText:SetShown(show)
     self.mainFrame.enemyBarContainer:SetShown(show)
     
-    local showDeaths = show and (self.showDeathInPanel or self.testMode)
-    
-    self.mainFrame.deathText:SetShown(showDeaths)
-    self.mainFrame.deathHitbox:SetShown(showDeaths)
-    self.mainFrame.affixText:SetShown(show)
+    local showDeath = (self.showDeathInPanel or self.testMode)
+    local hasAffix = (self.mainFrame.affixText:GetText() ~= "")
+
+    self.mainFrame.deathText:SetShown(show and showDeath)
+    self.mainFrame.deathHitbox:SetShown(show and showDeath)
+    self.mainFrame.affixText:SetShown(show and hasAffix)
     self.mainFrame.bossContainer:SetShown(show)
 end
 
@@ -382,6 +496,9 @@ function UIManager:UpdateRunConfig()
     local level = self.dataManager:GetActiveKeystoneLevel() or 0
     self.activeKeyLevel = level
     self.showDeathInPanel = (level > 3)
+    
+    -- [UPDATE] Config changed, recalculate layout
+    self:UpdateLayout()
 end
 
 function UIManager:CheckActiveRun()
@@ -493,12 +610,13 @@ function UIManager:UpdateAffixes()
     local config = Utils:GetConfig()
     local affixString = DisplayFormatter:FormatAffixText(affixes, config)
     self.mainFrame.affixText:SetText(affixString)
-    local offset = (affixString == "") and 0 or -20
-    self.mainFrame.enemyBarContainer:ClearAllPoints()
-    self.mainFrame.enemyBarContainer:SetPoint("TOPRIGHT", self.mainFrame.affixText, "BOTTOMRIGHT", 0, offset)
+    
+    -- [UPDATE] Layout needs to know if affix is empty
+    self:UpdateLayout()
 end
 
 function UIManager:OnUpdate(elapsed)
+    if self.mainFrame.isUnlocked then return end
     if self.testMode then return end
 
     local _, _, difficultyID = GetInstanceInfo()

@@ -52,7 +52,6 @@ local function Initialize()
     -- Initialize Config
     local config = NS.Config:New(NS.UIManagerInstance)
 
-    print("|cff00ff00NeliMythicTimer Loaded (Midnight Edition).|r")
 end
 
 local loader = CreateFrame("Frame")
