@@ -55,10 +55,8 @@ local function Initialize()
 end
 
 local loader = CreateFrame("Frame")
-loader:RegisterEvent("ADDON_LOADED")
-loader:SetScript("OnEvent", function(self, event, name)
-    if name == addonName then
-        Initialize()
-        self:UnregisterEvent("ADDON_LOADED")
-    end
+loader:RegisterEvent("PLAYER_LOGIN")
+loader:SetScript("OnEvent", function(self, event)
+    Initialize()
+    self:UnregisterEvent("PLAYER_LOGIN")
 end)

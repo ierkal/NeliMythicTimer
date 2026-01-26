@@ -2,7 +2,7 @@
 ## Title: NeliMythicTimer
 ## Author: Neliara
 ## Notes: Customized M+ Timer with additional features. 
-## Version: 1.0.62
+## Version: 1.0.63
 ## SavedVariables: NeliMythicTimerDB
 ## IconTexture: Interface\AddOns\NeliMythicTimer\NeliMythicTimer_icon.tga
 

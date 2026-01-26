@@ -21,9 +21,9 @@ local SIZE_BOSS_LIST = Constants.SIZE_BOSS_LIST
 
 -- [SMART POSITIONING]
 local function GetSmartDefaultOffset()
-    local xOffset = -30
-    if MultiBarRight and MultiBarRight:IsShown() then xOffset = xOffset - 45 end
-    if MultiBarLeft and MultiBarLeft:IsShown() then xOffset = xOffset - 45 end
+    local xOffset = -70
+    if MultiBarRight and MultiBarRight:IsShown() then xOffset = xOffset - 85 end
+    if MultiBarLeft and MultiBarLeft:IsShown() then xOffset = xOffset - 85 end
     return xOffset
 end
 
@@ -448,7 +448,26 @@ function UIManager:SetUnlocked(unlocked)
         end
     end
 end
+local function ForceHideFrame(frame)
+    if not frame then return end
+    if frame.Hide then frame:Hide() end
+    
+    local mt = getmetatable(frame)
+    if mt and mt.__index then
+        if mt.__index.Hide then mt.__index.Hide(frame) end
+        if mt.__index.SetAlpha then mt.__index.SetAlpha(frame, 0) end
+    end
+end
 
+local function ForceShowFrame(frame)
+    if not frame then return end
+    local mt = getmetatable(frame)
+    if mt and mt.__index then
+        if mt.__index.Show then mt.__index.Show(frame) end
+        if mt.__index.SetAlpha then mt.__index.SetAlpha(frame, 1) end
+    end
+    if frame.Show then frame:Show() end
+end
 function UIManager:HideBlizzardUI()
     self.blizzardUIHidden = true
     if ObjectiveTrackerFrame then ObjectiveTrackerFrame:SetShown(false) end
@@ -460,22 +479,72 @@ function UIManager:RestoreBlizzardUI()
     if ObjectiveTrackerFrame then ObjectiveTrackerFrame:SetShown(true) end
     if ScenarioBlocksFrame then ScenarioBlocksFrame:SetShown(true) end
 end
-
 function UIManager:EnforceBlizzardUIHidden()
     if not self.blizzardUIHidden then return end
-    if ObjectiveTrackerFrame and ObjectiveTrackerFrame:IsShown() then ObjectiveTrackerFrame:SetShown(false) end
-    if ScenarioBlocksFrame and ScenarioBlocksFrame:IsShown() then ScenarioBlocksFrame:SetShown(false) end
+
+    if ObjectiveTrackerFrame then ForceHideFrame(ObjectiveTrackerFrame) end
+    if ScenarioBlocksFrame then ForceHideFrame(ScenarioBlocksFrame) end
+
+    if C_AddOns.IsAddOnLoaded("!KalielsTracker") then
+        local ktFrames = {
+            _G["!KalielsTrackerFrame"],     
+            _G["!KalielsTrackerFrameBackground"],
+            _G["!KalielsTrackerScroll"],   
+            _G["KT_ObjectiveTrackerFrame"],
+            _G["KT_ScenarioObjectiveTracker"],
+            _G["!KalielsTrackerHeaderButtons"] 
+        }
+
+        for _, frame in pairs(ktFrames) do
+            ForceHideFrame(frame)
+        end
+    end
 end
 
+--- @param shouldHide boolean: True to hide the tracker, False to show it.
+function UIManager:SetObjectiveTrackerState(shouldHide)
+    
+    if not shouldHide then
+        if C_AddOns.IsAddOnLoaded("!KalielsTracker") then
+            local ktFrames = {
+                _G["!KalielsTrackerFrame"],
+                _G["KT_ObjectiveTrackerFrame"],
+                _G["KT_ScenarioObjectiveTracker"],
+                _G["!KalielsTrackerScroll"],
+                _G["!KalielsTrackerHeaderButtons"]
+            }
+
+            for _, frame in pairs(ktFrames) do
+                ForceShowFrame(frame)
+            end
+            
+            local KT = LibStub("MSA-AceAddon-3.0"):GetAddon("!KalielsTracker", true)
+            if KT and KT.Update then KT:Update() end
+
+        else
+            if ObjectiveTrackerFrame then ForceShowFrame(ObjectiveTrackerFrame) end
+        end
+    end
+end
+
+function UIManager:HideKalielsTracker()
+    self:SetObjectiveTrackerState(true)
+end
+
+function UIManager:ShowKalielsTracker()
+    self:SetObjectiveTrackerState(false)
+end
 function UIManager:ShowPanel()
     self.mainFrame:Show()
     self:HideBlizzardUI()
+    self:HideKalielsTracker()
 end
 
 function UIManager:HidePanel()
     if self.mainFrame.isUnlocked then return end
     self.mainFrame:Hide()
     self:RestoreBlizzardUI()
+    self:ShowKalielsTracker()
 end
 
 -- [UPDATED] Visibility now respects the "hasAffix" check for cleaner logic
