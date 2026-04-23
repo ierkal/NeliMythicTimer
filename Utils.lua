@@ -8,6 +8,9 @@ Utils.DEFAULTS = {
     showBossKillTimes = true,
     showEnemyPercent = true,
     showEnemyCount = true,
+    showPullPreview = true,
+    showTooltipForces = true,
+    showNameplateForces = true,
     scale = 1.0,
     colors = {
         -- Header Info
@@ -27,6 +30,10 @@ Utils.DEFAULTS = {
         enemyBar = {r=0.45, g=0.0, b=0.85, a=1},
         enemyText = {r=1, g=1, b=1, a=1},
         enemyTextComplete = {r=0, g=1, b=0, a=1},
+
+        -- Pull Preview (ghost bar, nameplate, tooltip)
+        pullPreviewBar = {r=0, g=1, b=0, a=0.55},
+        pullPreviewText = {r=0, g=1, b=0, a=1},
         
         -- Bosses
         bossAlive = {r=1, g=1, b=1, a=1},

@@ -7,6 +7,8 @@ local Constants = NS.Constants
 local Utils = NS.Utils
 local DisplayFormatter = NS.DisplayFormatter
 
+local issecretvalue = issecretvalue or function() return false end
+
 -- Shorthand references
 local FONT_FACE = Constants.FONT_FACE
 local FONT_FLAG = Constants.FONT_FLAG
@@ -136,9 +138,13 @@ function UIManager:UpdateDemoDisplay(config)
     self.mainFrame.upgradeText:SetText(DisplayFormatter:FormatUpgradeText(100, 300, config))
     
     local demoData = DisplayFormatter:GetDemoEnemyData()
-    local displayText, _ = DisplayFormatter:FormatEnemyForces(demoData.rawKilled, demoData.totalCount, config)
-    self.mainFrame.enemyText:SetText(displayText)
-    self.mainFrame.enemyBar:SetValue(demoData.killedPercent)
+    local demoPull = {
+        mobCount = 1,
+        unit = { value = 12, pctStr = "3.20" },
+    }
+    local killedPct = self:RenderEnemyText(demoData.rawKilled, demoData.totalCount, demoPull, config)
+    self.mainFrame.enemyBar:SetValue(killedPct)
+    self:UpdateGhostBar(killedPct, demoPull, config)
 
     for _, frame in pairs(self.bossListFrames) do frame:Hide() end
     local demoBosses = DisplayFormatter:GetDemoBosses()
@@ -195,15 +201,73 @@ function UIManager:UpdateEnemyForces(info, config)
         rawKilled = tonumber(string.match(info.quantityString, "(%d+)")) or 0
     end
 
-    local displayText, percent = DisplayFormatter:FormatEnemyForces(rawKilled, dungeonTotal, config)
-    self.mainFrame.enemyText:SetText(displayText)
+    local pullInfo = nil
+    if config.showPullPreview ~= false and NS.PullTracker then
+        pullInfo = NS.PullTracker:GetPullPreview(dungeonTotal)
+    end
+
+    local percent = self:RenderEnemyText(rawKilled, dungeonTotal, pullInfo, config)
     self.mainFrame.enemyBar:SetValue(percent)
+    self:UpdateGhostBar(percent, pullInfo, config)
+end
+
+-- Renders "X/Y - Z%" plus per-mob preview on the enemyText FontString.
+--
+-- SecretValue constraint (Midnight): arithmetic on SecretValues taints from
+-- addon code, including SecretValue+SecretValue. So we can't produce a sum.
+-- Each mob's value/pctStr is individually pass-through'd to SetFormattedText
+-- (Blizzard C-side formatter handles SecretValues safely).
+--
+-- Text suffix is only shown for single-mob pulls (" +V(P%)"). Multi-mob pulls
+-- can't be summed (SecretValue arithmetic taints), so for 2+ mobs the ghost
+-- bar alone conveys the pull.
+function UIManager:RenderEnemyText(rawKilled, dungeonTotal, pullInfo, config)
+    local fs = self.mainFrame.enemyText
+    local basePart, killedPercent = DisplayFormatter:FormatEnemyForcesBase(rawKilled, dungeonTotal, config)
+
+    local pullEnabled = pullInfo and pullInfo.mobCount > 0 and config.showPullPreview ~= false
+    if not pullEnabled or not pullInfo.unit then
+        fs:SetText(basePart)
+        return killedPercent
+    end
+
+    local pullColor = (config.colors and config.colors.pullPreviewText) or {r=0, g=1, b=0, a=1}
+    local pullHex = Utils:RGBToHex(pullColor)
+
+    -- basePart already contains literal "%"; escape so SetFormattedText
+    -- doesn't consume it as a specifier.
+    local fmt = basePart:gsub("%%", "%%%%") .. " " .. pullHex .. "+%s(%s%%)|r"
+    if not pcall(fs.SetFormattedText, fs, fmt, pullInfo.unit.value, pullInfo.unit.pctStr) then
+        fs:SetText(basePart)
+    end
+    return killedPercent
+end
+
+function UIManager:UpdateGhostBar(killedPercent, pullInfo, config)
+    local gb = self.mainFrame.ghostBar
+    if not gb then return end
+
+    if not pullInfo or config.showPullPreview == false or not pullInfo.mobCount or pullInfo.mobCount == 0 then
+        gb:Hide()
+        return
+    end
+
+    -- StatusBar:SetValue needs a plain number and we can't sum SecretValues,
+    -- so extension is a count-scaled visual pulse (1.5% per mob, capped at 10%).
+    local extension = math.min(pullInfo.mobCount * 1.5, 10)
+    local combined = math.min((killedPercent or 0) + extension, 100)
+    gb:SetValue(combined)
+
+    local c = (config.colors and config.colors.pullPreviewBar) or {r=0, g=1, b=0, a=0.55}
+    gb:SetStatusBarColor(c.r, c.g, c.b, c.a or 0.55)
+    gb:Show()
 end
 
 function UIManager:UpdateCompletedEnemyForces(dungeonTotal, config)
     local displayText = DisplayFormatter:FormatCompletedEnemyForces(dungeonTotal, config)
     self.mainFrame.enemyText:SetText(displayText)
     self.mainFrame.enemyBar:SetValue(100)
+    if self.mainFrame.ghostBar then self.mainFrame.ghostBar:Hide() end
 end
 
 function UIManager:UpdateBossLine(bossIndex, bossName, isCompleted, currentElapsed, config)
@@ -375,11 +439,25 @@ function UIManager:BuildInterface()
     f.enemyBarBG:SetAllPoints(f.enemyBarContainer)
     f.enemyBarBG:SetColorTexture(0, 0, 0, 1)
 
+    local baseLevel = f.enemyBarContainer:GetFrameLevel()
+
+    -- Ghost bar: fills to killed% + pull preview %, sits behind the real bar so
+    -- the visible green sliver only shows in the (killed, killed+pull] range.
+    f.ghostBar = CreateFrame("StatusBar", nil, f.enemyBarContainer)
+    f.ghostBar:SetPoint("TOPLEFT", f.enemyBarContainer, "TOPLEFT", 0, 0)
+    f.ghostBar:SetPoint("BOTTOMRIGHT", f.enemyBarContainer, "BOTTOMRIGHT", 0, 0)
+    f.ghostBar:SetStatusBarTexture(BAR_TEXTURE)
+    f.ghostBar:SetMinMaxValues(0, 100)
+    f.ghostBar:SetValue(0)
+    f.ghostBar:SetFrameLevel(baseLevel + 1)
+    f.ghostBar:Hide()
+
     f.enemyBar = CreateFrame("StatusBar", nil, f.enemyBarContainer)
     f.enemyBar:SetPoint("TOPLEFT", f.enemyBarContainer, "TOPLEFT", 0, 0)
     f.enemyBar:SetPoint("BOTTOMRIGHT", f.enemyBarContainer, "BOTTOMRIGHT", 0, 0)
     f.enemyBar:SetStatusBarTexture(BAR_TEXTURE)
     f.enemyBar:SetMinMaxValues(0, 100)
+    f.enemyBar:SetFrameLevel(baseLevel + 2)
 
     f.enemyText = f.enemyBar:CreateFontString(nil, "OVERLAY")
     f.enemyText:SetFont(FONT_FACE, SIZE_BAR_TEXT, FONT_FLAG)
@@ -618,6 +696,7 @@ function UIManager:FullReset(force)
         if self.mainFrame then
             self.mainFrame.enemyText:SetText("")
             self.mainFrame.enemyBar:SetValue(0)
+            if self.mainFrame.ghostBar then self.mainFrame.ghostBar:Hide() end
             self.mainFrame.timerText:SetText("")
             self.mainFrame.upgradeText:SetText("")
         end

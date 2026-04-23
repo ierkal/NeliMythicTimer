@@ -4,9 +4,12 @@ local DisplayFormatter = {}
 local Utils = NS.Utils
 
 -- === ENEMY FORCES DISPLAY ===
-function DisplayFormatter:FormatEnemyForces(rawKilled, totalCount, config)
+-- Base-only formatter for the "X/Y - Z%" portion. Pull preview ("+X(Y%)" or
+-- "+N mobs") is rendered separately in UIManager:RenderEnemyText so SecretValue
+-- sums can go through SetFormattedText pass-through without taint.
+function DisplayFormatter:FormatEnemyForcesBase(rawKilled, totalCount, config)
     local killedPercent = (rawKilled / totalCount) * 100
-    
+
     local parts = {}
     if config.showEnemyCount then
         table.insert(parts, string.format("%d/%d", rawKilled, totalCount))
@@ -14,18 +17,17 @@ function DisplayFormatter:FormatEnemyForces(rawKilled, totalCount, config)
     if config.showEnemyPercent then
         table.insert(parts, string.format("%.2f%%", killedPercent))
     end
-    
+
     local displayText = table.concat(parts, " - ")
     if displayText == "" then
         displayText = string.format("%.2f%%", killedPercent)
     end
-    
-    -- Check completion for color
+
     local color = config.colors.enemyText
     if killedPercent >= 100 then
         color = config.colors.enemyTextComplete
     end
-    
+
     return Utils:ColorString(displayText, color), killedPercent
 end
 

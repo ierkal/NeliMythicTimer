@@ -2,7 +2,7 @@
 ## Title: NeliMythicTimer
 ## Author: Neliara
 ## Notes: Customized M+ Timer with additional features. 
-## Version: 1.0.63
+## Version: 1.0.7
 ## SavedVariables: NeliMythicTimerDB
 ## IconTexture: Interface\AddOns\NeliMythicTimer\NeliMythicTimer_icon.tga
 
@@ -16,6 +16,17 @@ EventObserver.lua
 DungeonDataManager.lua
 DeathTracker.lua
 TimerEngine.lua
+PullTracker.lua
+
+# Live forces: tooltip + nameplate overlays
+TooltipAugment.lua
+Nameplates.lua
+NameplateAdapters/Blizzard.lua
+NameplateAdapters/Plater.lua
+NameplateAdapters/ElvUI.lua
+NameplateAdapters/ThreatPlates.lua
+NameplateAdapters/Platynator.lua
+NameplateAdapters/RyoUI.lua
 
 # UI and Config
 UIManager.lua

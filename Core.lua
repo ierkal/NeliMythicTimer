@@ -46,12 +46,14 @@ local function Initialize()
     local timerEngine = NS.TimerEngine:New(dataManager, deathTracker)
     local keystoneAnnouncer = NS.KeystoneAnnouncer:New(eventObserver)
     
-    -- Store UIManager instance (PullTracker removed)
     NS.UIManagerInstance = NS.UIManager:New(eventObserver, dataManager, timerEngine, deathTracker)
 
     -- Initialize Config
     local config = NS.Config:New(NS.UIManagerInstance)
 
+    -- Live per-mob forces: tooltip augment + nameplate overlays
+    if NS.TooltipAugment and NS.TooltipAugment.Init then NS.TooltipAugment:Init() end
+    if NS.Nameplates and NS.Nameplates.Init then NS.Nameplates:Init() end
 end
 
 local loader = CreateFrame("Frame")
